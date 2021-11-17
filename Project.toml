@@ -1,6 +1,6 @@
 name = "Sentinel"
 uuid = "b367cf14-19c4-4862-849d-7c6f64208072"
-authors = ["mike "]
+authors = ["Mike Hudecheck"]
 version = "0.1.0"
 
 [deps]
