@@ -1,7 +1,10 @@
 name = "Sentinel"
 uuid = "b367cf14-19c4-4862-849d-7c6f64208072"
-authors = ["Mike Hudecheck"]
-version = "0.1.0"
+keywords = ["Sentinel"]
+license = "MIT"
+desc = "Library for working with ESA Sentinel 2 products"
+authors = ["Michael Hudecheck" <michael.hudecheck@unisg.ch>]
+version = "0.1.1"
 
 [deps]
 ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
@@ -10,3 +13,11 @@ Graphics = "a2bd30eb-e257-5431-a919-1863eab51364"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 Metadata = "4fb893c1-3164-4f58-823a-cb4c64eabb4f"
 NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
+
+[compat]
+ArchGDAL = "ˆ0.7.4"
+CUDA = "ˆ3.5.0"
+NamedArrays = "ˆ0.9.6"
+Metadata = "ˆ0.3.0"
+Interpolations = "ˆ0.13.4"
+Graphics = "ˆ1.1.1"
