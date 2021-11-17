@@ -6,6 +6,7 @@ module Sentinel
     using Metadata
     using Interpolations
     using Graphics
+    using Images
 
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -187,7 +188,7 @@ module Sentinel
                 t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
                 
                 # Process Cloud Screen - Cloud Masks are always at 10m
-                GPU == true ? cloudScreen = resizeCuda(CuArray(Array{Float16}(t1a)), width(r1), height(r1); interpolation=false) : cloudScreen = imresize(t1a, width(r1), height(r1));
+                GPU == true ? cloudScreen = resizeCuda(CuArray(Array{Float16}(t1a)), width(r1), height(r1); interpolation=false) : cloudScreen = Images.imresize(t1a, width(r1), height(r1));
                 testVec = findall(cloudScreen .< 1)
                 cloudScreen[testVec] .= 0
                 cloudScreen = BitArray(cloudScreen)
