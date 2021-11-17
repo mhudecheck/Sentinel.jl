@@ -1,6 +1,6 @@
 # Sentinel.jl
 
-This is an early package for working with Sentinel 2 safe files in Julia. It includes functions for reading Sentinel 2 bands, creating cloud cover screens using multiple captures, interpolating 20m and 60m bands to 10m, and writing the results as a GeoTiff with associated metadata. It also interfaces with CUDA.jl for GPU processing.
+This is an early package for working with Sentinel 2 safe files in Julia. It includes functions for reading Sentinel 2 bands, creating cloud cover screens using multiple captures, interpolating 20m and 60m bands to 10m, and writing the results as a GeoTiff with associated metadata. It also interfaces with CUDA.jl for GPU processing, which gives a 10-15x speed up.
 
 This is the first version of the library. At the moment, it only works with Level 2a files. The SAFE files must also be unzipped.
 
