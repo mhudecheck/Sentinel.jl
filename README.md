@@ -4,7 +4,7 @@ This is an early package for working with Sentinel 2 safe files in Julia. It inc
 
 This is the first version of the library. At the moment, it only works with Level 2a files. The SAFE files must also be unzipped.
 
-Sentinel 2 SAFE files are loaded with loadSentinel(). You can specify GPU = true to load the individual bands as CuArrays. The output is a dictionary with the bands specified as "BandName-Resolution" (e.g., Band One loads as B1-60m). The band values MetaArrays with relevant band and file metadata from gdalinfo() loaded to file["BandName-Resolution"].metadata and .fiedata.
+Sentinel 2 SAFE files are loaded with loadSentinel(). You can specify GPU = true to load the individual bands as CuArrays. The output is a dictionary with the bands specified as "BandName-Resolution" (e.g., Band One loads as B1-60m). The band values MetaArrays with relevant band and file metadata from gdalinfo() loaded to file["BandName-Resolution"].metadata and .filedata.
 
 ```
 using Sentinel 
