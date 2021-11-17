@@ -242,13 +242,13 @@ module Sentinel
         return screenOne, screenTwo 
     end
 
-    function generateScreens(files)
+    function generateScreens(files; b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, cloudMaskScreen = 20, GPU=true)
         for i in 1:length(files)
             fileA = files[i]
             if i != length(files)
                 for j in i+1:length(files) 
                     fileB = files[j]
-                    targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; GPU_All = true)
+                    targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
                     haskey(fileA, "CloudScreen") == true ? fileA["CloudScreen"] = broadcast(cudaBitScan, fileA["CloudScreen"], screenScreen) : fileA["CloudScreen"] = screenScreen
                     haskey(fileB, "CloudScreen") == true ? fileB["CloudScreen"] = broadcast(cudaBitScan, fileB["CloudScreen"], targetScreen) : fileB["CloudScreen"] = targetScreen
                     targetScreen = nothing
@@ -259,7 +259,7 @@ module Sentinel
         return
     end
 
-    function applyScreens(files)
+    function applyScreens(files; GPU = true) 
         for file in files
             if haskey(file, "CloudScreen")
                 for i in keys(file)
@@ -267,7 +267,7 @@ module Sentinel
                         keyName = split(i, "-")
                         tmpScreen = parent(file[i])
                         if size(file[i]) != size(file["CloudScreen"])
-                            tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = true);
+                            tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = GPU);
                         end
                         bandName = keyName[1] * "-Screened"
                         file[bandName] = tmpScreen .* file["CloudScreen"]
