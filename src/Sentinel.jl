@@ -7,6 +7,11 @@ module Sentinel
     using Interpolations
     using Graphics
     using Images
+    using GoogleCloud
+    using CSVFiles
+    using DataFrames
+    using JSON
+    using Printf
 
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -45,9 +50,9 @@ module Sentinel
         return
     end
 
-    #=function pn(x) 
-        @printf "%f"  maximum(x)
-    end=#
+    function pn(x) 
+        @printf "%f" maximum(x)
+    end
 
     function loadSentinel(tif; GPU=false)
         tifArray = Dict()
@@ -357,4 +362,101 @@ module Sentinel
     end
 
     export generateCloudless, resizeCuda, linearkernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaInvert, cudaBitScan, scanMean, scanFind, scanGreaterThan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, scanMerge, scanMaxMerge, saveScreenedRasters
+
+    function cloudDownload(location; writeFile = true)
+        collData = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", location) 
+        if writeFile == true
+            open(location, "w") do file
+                write(file, collData)
+            end
+        else
+            io = IOBuffer();
+            write(io, collData);
+            return io
+        end 
+    end
+
+    function obtain(SAFE)
+        mkpath(SAFE)
+        rawFileList = GoogleCloud.storage(:Object, :list, "gcp-public-data-sentinel-2"; prefix=SAFE, deliminater="/")
+        io = IOBuffer();
+        write(io, rawFileList);
+        fileList = String(take!(io));
+        fileList = JSON.parse(fileList);
+        for item in fileList["items"]
+            if occursin("_\$folder\$", item["name"]) == true
+                folderPath = chop(item["name"], head=0, tail=9)
+                mkpath(folderPath)
+            else
+                filePath = SubString.(item["name"], 1, findlast(==('/'),item["name"]))
+                mkpath(filePath)
+                cloudDownload(item["name"]) 
+            end
+        end
+    end
+
+    function safeList(; cache=true, update=true, cacheLocation = "~/.img_cache")
+        currentDirectory = pwd()
+        mkpath(cacheLocation)
+        cd(cache)
+        if isfile("cacheIndex.csv.gz") == true
+            if update == false
+                df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
+                return df
+            end
+        else 
+            obs = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", "L2/index.csv.gz")
+            open("cacheIndex.csv.gz", "w") do file
+                write(file, obs)
+            end
+            df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
+        end
+        cd(currentDirectory)
+        return df
+    end
+    
+    function zulu()
+        escaped_format = "yyyy-mm-dd\\THH:MM:SS.sss\\Z"
+        Zulu = String
+        Dates.CONVERSION_SPECIFIERS['Z'] = Zulu
+        Dates.CONVERSION_DEFAULTS[Zulu] = ""
+        df = Dates.DateFormat(escaped_format)
+        return df
+    end 
+    
+    function parseSentinelTime(time, format)
+        parsedTime = DateTime(time, format)
+        return parsedTime
+    end
+    
+    function filterList(inputFile, mgrs, startDate, endDate; cover=10)
+        format = zulu()
+        subsetDF = subset(inputFile, 
+                                    :MGRS_TILE => ByRow(x -> x == mgrs),
+                                    :CLOUD_COVER => ByRow(x -> x < cover),
+                                    :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) > startDate),
+                                    :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) < endDate)
+                                    )
+        subsetDF = sort(subsetDF, (:CLOUD_COVER))
+        return subsetDF
+    end
+
+    function downloadTiles(inputList, numberFiles; cache="~/.img_cache")
+        currentDirectory = pwd()
+        mkpath(cache)
+        cd(cache)
+        downloadStrings = replace.(inputList.BASE_URL[1:numberFiles], r"gs://gcp-public-data-sentinel-2/" => "")
+        for safeUrl in downloadStrings
+            Sentinel.obtain(safeUrl)
+        end
+        filePath = cache .* "/" .* SubString.(downloadStrings, 1, findlast.(==('/'), downloadStrings))
+        cd(currentDirectory)
+        return filePath[1]
+    end
+
+    function cloudInit(credentials) 
+        creds = JSONCredentials(credentials)
+        session = GoogleSession(creds, ["devstorage.full_control"])
+        set_session!(storage, session) 
+    end
 end
