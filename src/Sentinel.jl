@@ -460,3 +460,4 @@ module Sentinel
         set_session!(storage, session) 
     end
 end
+

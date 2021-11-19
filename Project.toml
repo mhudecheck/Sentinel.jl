@@ -8,17 +8,36 @@ version = "0.1.1"
 
 [deps]
 ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CSVFiles = "5d742f6a-9f54-50ce-8119-2520741973ca"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+GoogleCloud = "55e21f81-8b0a-565e-b5ad-6816892a5ee7"
 Graphics = "a2bd30eb-e257-5431-a919-1863eab51364"
+Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Metadata = "4fb893c1-3164-4f58-823a-cb4c64eabb4f"
 NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [compat]
 ArchGDAL = "^0.7.4"
 CUDA = "^3.5.0"
-NamedArrays = "^0.9.6"
-Metadata = "^0.3.0"
-Interpolations = "^0.13.4"
 Graphics = "^1.1.1"
+Interpolations = "^0.13.4"
+Metadata = "^0.3.0"
+NamedArrays = "^0.9.6"
 julia = "^1.6.0"
+CSV = "^0.9.11"
+CSVFiles = "^1.0.1"
+DataFrames = "^1.2.2"
+JSON = "^0.21.2"
+Printf = "^0.1.0"
+GoogleCloud = "^0.8.2"
+Images = "^0.24.1"
+
+
+
+
+
