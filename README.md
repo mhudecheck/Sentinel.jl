@@ -31,18 +31,18 @@ If you want to access the Google Cloud repository, first initialize your credent
 using Sentinel.jl
 using GoogleCloud.jl 
 
-creds = JSONCredentials(path_to_credentials.json)
+creds = JSONCredentials("path_to_credentials.json")
 session = GoogleSession(creds, ["devstorage.full_control"])
 set_session!(storage, session)
 
-# Note that you can also run cloudInit(path_to_credentials.json)
+# Note that you can also run cloudInit("path_to_credentials.json")
 ```
  
-Then, get a list of Sentinel L2A products with safeList(). Note that you can set a custom cache directory by running safeList(; cacheLocation = "/your_cache_directory):
+Then, get a list of Sentinel L2A products with safeList(). Note that you can set a custom cache directory by running safeList(; cacheLocation = "/your_cache_directory"):
 ```
 l2aList = safeList() # Outputs a DataFrame Array
 ```
-You can then run filterList(l2aList, UTM_Tile, startDate, endDate; cloud) to subset the L2A capture list for your targeted UTM tile and date range. You can specify a maximum cloud cover level with filterList(...;cover=10).
+You can then run filterList(l2aList, UTM_Tile, startDate, endDate; cloud) to subset the L2A capture list for your targeted UTM tile and date range. You can specify a maximum cloud cover level with filterList(...; cover=10).
 
 ```
 l2aSubSet = filterList(l2aList, "32TNT", Date(2021,10,01), Date(2021,10,31); cover=5); # Returns a DataFrame with all captures of St. Gallen, CH and the surrounding region in October 2021 that have CLOUD_COVER set to 5 or less.
