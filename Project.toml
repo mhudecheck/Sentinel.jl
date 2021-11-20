@@ -33,7 +33,7 @@ CSV = "^0.9.11"
 CSVFiles = "^1.0.1"
 DataFrames = "^1.2.2"
 JSON = "^0.21.2"
-Printf = "^0.1.0"
+Printf = "^1.6.4"
 GoogleCloud = "^0.8.2"
 Images = "^0.24.1"
 
