@@ -8,6 +8,7 @@ module Sentinel
     using Graphics
     using Images
     using GoogleCloud
+    using CSV
     using CSVFiles
     using DataFrames
     using JSON
