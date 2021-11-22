@@ -1,5 +1,6 @@
 # Sentinel.jl
 
+Note: Installation via Pkg.add("Sentinel") should work on Monday or Tuesday. For now, please use Pkg.add(url="https://github.com/mhudecheck/Sentinel.jl").
 
 Sentinel.jl is a Julia library for working with ESA Sentinel 2 data. It includes functions for finding, downloading, reading, interpolating, and merging Sentinel 2 bands. It also includes functions for creating cloud cover screens by comparing multiple band captures and applying user-specified threshold values. 
 

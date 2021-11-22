@@ -23,7 +23,7 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [compat]
 ArchGDAL = "^0.7.4"
-CUDA = "^3.5.0"
+CUDA = "^3.4.0"
 Graphics = "^1.1.1"
 Interpolations = "^0.13.4"
 Metadata = "^0.3.0"
@@ -33,7 +33,7 @@ CSV = "^0.9.11"
 CSVFiles = "^1.0.1"
 DataFrames = "^1.2.2"
 JSON = "^0.21.2"
-Printf = "^1.6.4"
+Printf = "^1.4.1"
 GoogleCloud = "^0.8.2"
 Images = "^0.24.1"
 
