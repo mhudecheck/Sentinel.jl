@@ -405,11 +405,8 @@ module Sentinel
         currentDirectory = pwd()
         mkpath(cache)
         cd(cache)
-        if isfile("cacheIndex.csv.gz") == true
-            if update == false
-                df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
-                return df
-            end
+        if isfile("cacheIndex.csv.gz") == true & update == false
+            df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
         else 
             obs = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", "L2/index.csv.gz")
             open("cacheIndex.csv.gz", "w") do file
