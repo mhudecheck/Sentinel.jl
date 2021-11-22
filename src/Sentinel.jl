@@ -18,6 +18,8 @@ module Sentinel
     using Glob
     using Dates
 
+    export resizeCuda, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel
+   
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
         if interpolation == true
@@ -38,7 +40,6 @@ module Sentinel
             return outputCUDAArray
         end
     end
-
 
     # Linear Kernel
     function linearKernel(output, input)
