@@ -403,7 +403,7 @@ module Sentinel
 
     function safeList(; cache="~/.img_cache", update=true)
         currentDirectory = pwd()
-        mkpath(cacheLocation)
+        mkpath(cache)
         cd(cache)
         if isfile("cacheIndex.csv.gz") == true
             if update == false
