@@ -13,6 +13,10 @@ module Sentinel
     using DataFrames
     using JSON
     using Printf
+    using LightXML
+    using Base64
+    using Glob
+    using Dates
 
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -396,7 +400,7 @@ module Sentinel
         end
     end
 
-    function safeList(; cache=true, update=true, cacheLocation = "~/.img_cache")
+    function safeList(; cache="~/.img_cache", update=true)
         currentDirectory = pwd()
         mkpath(cacheLocation)
         cd(cache)
@@ -415,6 +419,79 @@ module Sentinel
         cd(currentDirectory)
         return df
     end
+
+    function sentinelFiveList(startDay, endDay; platform = "Sentinel-5", user = "s5pguest", pass = "s5pguest", start = 0, rows = 100)
+        # Format Dates
+        sDate = string(DateTime(startDay, "yyyymmdd"), "Z")
+        eDate = string(DateTime(endDay, "yyyymmdd"), "Z")
+        # Get XML
+        xmlRoot, next = processSentHTML(user, pass, platform, start, rows, sDate, eDate)
+        println(next)
+        files = cleanSentXML(xmlRoot)
+        while next != 0
+          start = start + rows
+          xmlRoot, next = processSentHTML(user, pass, platform, start, rows, sDate, eDate)
+          println(next)
+          itrFiles = cleanSentXML(xmlRoot)
+          files = [files; itrFiles]
+        end
+        return files
+    end
+
+    function cleanSentXML(xmlRoot)
+        files = DataFrame(title = String[], href = String[], fileName = String[], abbr = String[], desc = String[], uuid = String[])
+        entries = xmlRoot["entry"]
+        title = ""
+        href = ""
+        fileName = ""
+        abbr = ""
+        desc = ""
+        uuid = ""
+        for i in entries
+            title = content(i["title"][1])
+            linkList = i["link"]
+            strList = i["str"]
+            href = LightXML.attribute(linkList[1], "href")
+        
+            for j in strList 
+            println(j)
+            if LightXML.attribute(j, "name") == "filename"
+                fileName = content(j)
+            elseif LightXML.attribute(j, "name") == "processingmodeabbreviation"
+                abbr = content(j)
+            elseif LightXML.attribute(j, "name") == "producttypedescription"
+                desc = content(j)
+            elseif LightXML.attribute(j, "name") == "uuid"
+                uuid = content(j)
+            end
+            end
+            push!(files, (title, href, fileName, abbr, desc, uuid))
+        end
+        return files
+    end
+    
+    function processSentHTML(user, pass, platform, start, rows, sDate, eDate)
+        # Create HTTP Get Request
+        link = "https://$user:$pass@s5phub.copernicus.eu/search?start=$start&rows=$rows&q="
+        queryString = string("(platformname:$platform%20AND%20beginposition:%5b$sDate%20TO%20$eDate%5d)")
+        url = string(link, queryString)
+        
+        # Get File List
+        println("Getting: $url")
+        resp = HTTP.get(url)
+        println(resp.request)
+        x = String(resp.body)
+        xmlExt = parse_string(x)
+        xmlRoot = root(xmlExt)
+        links = xmlRoot["link"]
+        next = 0
+        for i in links
+            if LightXML.attribute(i, "rel") == "next"
+            next = LightXML.attribute(i, "href")
+            end
+        end
+        return xmlRoot, next
+    end   
     
     function zulu()
         escaped_format = "yyyy-mm-dd\\THH:MM:SS.sss\\Z"
@@ -459,6 +536,28 @@ module Sentinel
         creds = JSONCredentials(credentials)
         session = GoogleSession(creds, ["devstorage.full_control"])
         set_session!(storage, session) 
+    end
+
+    function downloadSentinelFive(urlList; cache=pwd())
+        for i in urlList
+          print(i)
+          authEncode = "Basic " * base64encode("s5pguest" * ":" * "s5pguest")
+          auth = Dict("Authorization" => authEncode)
+          HTTP.download(i, cache; headers = auth)
+        end 
+    end
+
+    function bashDownloadSentinelFive(urlList; cache=pwd())
+        currDir = pwd()
+        cd(cache)
+        outFile = open("links", "w")
+        for i in urlList
+            println(outFile, i)
+        end
+        close(outFile)
+        parDownload = pipeline(`cat links`, `xargs -d "\n" -P 15 -L 1 wget --content-disposition --continue --user=s5pguest --password=s5pguest`)
+        run(parDownload)
+        cd(currDir)
     end
 end
 
