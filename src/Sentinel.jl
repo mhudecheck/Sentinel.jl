@@ -246,15 +246,28 @@ module Sentinel
                 t1a = nothing
                 bScreen = nothing
                 rScreen = nothing   
+                b2 = nothing
+                c2 = nothing
+                s2 = nothing
+                bl1 = nothing
+                bl2 = nothing
+                r1 = nothing
+                r2 = nothing
                 return cloudScreen
             end
         end
         screenOne = processScreens(imageBandsA, imageBandsB; GPU=GPU, GPU_All=GPU_All)
         screenTwo = processScreens(imageBandsB, imageBandsA; GPU=GPU, GPU_All=GPU_All)
+        if GPU_All == true
+            imageBandsA = nothing
+            imageBandsB = nothing
+            GC.gc()
+            CUDA.reclaim()
+        end
         return screenOne, screenTwo 
     end
 
-    function generateScreens(files; b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, cloudMaskScreen = 20, GPU=true)
+    function generateScreens(files; b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, cloudMaskScreen = 20, GPU=false)
         for i in 1:length(files)
             fileA = files[i]
             if i != length(files)
@@ -265,13 +278,18 @@ module Sentinel
                     haskey(fileB, "CloudScreen") == true ? fileB["CloudScreen"] = broadcast(cudaBitScan, fileB["CloudScreen"], targetScreen) : fileB["CloudScreen"] = targetScreen
                     targetScreen = nothing
                     screenScreen = nothing
+                    fileB = nothing
                 end
             end
+            fileA = nothing
         end
-        return
+        if GPU == true
+            GC.gc()
+            CUDA.reclaim()
+        end
     end
 
-    function applyScreens(files; GPU = true) 
+    function applyScreens(files; GPU = false) 
         for file in files
             if haskey(file, "CloudScreen")
                 for i in keys(file)
@@ -283,6 +301,11 @@ module Sentinel
                         end
                         bandName = keyName[1] * "-Screened"
                         file[bandName] = tmpScreen .* file["CloudScreen"]
+                        tmpScreen = nothing
+                        if GPU == true
+                            GC.gc()
+                            CUDA.reclaim()
+                        end
                     end
                 end
             end
@@ -401,10 +424,12 @@ module Sentinel
         end
     end
 
-    function safeList(; cache="~/.img_cache", update=true)
+    function safeList(; cache="/.img_cache", update=true)
         currentDirectory = pwd()
         mkpath(cache)
         cd(cache)
+        println(cache)
+        println(isfile("cacheIndex.csv.gz"))
         if isfile("cacheIndex.csv.gz") == true & update == false
             df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
         else 
