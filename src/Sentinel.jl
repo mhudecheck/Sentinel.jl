@@ -357,15 +357,20 @@ module Sentinel
                     end
                 end
             end
-            geoTransform = file["CLD-20m"].geotransform
-            ref = file["CLD-20m"].ref
-            bandWidth = width(parent(file["B2-10m"]))
-            bandHeight = height(parent(file["B2-10m"]))
+            geoTransform = file["B2-10m"].geotransform
+            ref = file["B2-10m"].ref
+            sourceFile = transpose(parent(file["B2-10m"]))
+            sourceFile = parent(file["B2-10m"])
+
+            bandWidth = width(sourceFile)
+            bandHeight = height(sourceFile)
+            @show "Writing tif"
             ArchGDAL.create(name; driver=ArchGDAL.getdriver("GTiff"), width=bandWidth, height=bandHeight, nbands=bandCount, dtype=type) do raster
                 ArchGDAL.setgeotransform!(raster, geoTransform)
                 ArchGDAL.setproj!(raster, ref)
                 for k in 1:bandCount
                     rast = broadcast(trunc, parent(file[bandList[k]]))
+                    #rast = transpose(rast)
                     rast = Array{type}(rast)
                     ArchGDAL.write!(raster, rast, k)
                     ArchGDAL.getband(raster, k) do band
