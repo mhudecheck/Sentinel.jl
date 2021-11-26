@@ -172,7 +172,7 @@ module Sentinel
 
     # Create Screen (CUDA Only)
 
-    function sentinelCloudScreen(targetFile, screenFile; b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, cloudMaskScreen = 20, GPU=true, GPU_All = false)
+    function sentinelCloudScreen(targetFile, screenFile; b1Screen = 400, b2Screen = 750, b4Screen = 2000, cloudMaskScreen = 80, GPU=true, GPU_All = false)
         #println("Starting Cloud Screen")
         # Users can pass either a string to the SAFE file location or preloaded Abstract Arrays
         if typeof(targetFile) == String
