@@ -18,7 +18,7 @@ module Sentinel
     using Glob
     using Dates
 
-    export resizeCuda, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel
+    export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -109,6 +109,28 @@ module Sentinel
             end
         end
         return y
+    end
+
+    function flushSAFE(files; GPU = false) 
+        for file in files
+            if haskey(file, "CloudScreen")
+                for i in keys(file)
+                    println(i)
+                    if i != "CloudScreen"
+                        keyName = split(i, "-")
+                        if keyName[2] != "Screened" && keyName[2] != "10m"
+                            file[i] = nothing
+                            
+                        end
+                    end
+                end
+            end
+            if GPU == true
+                GC.gc()
+                CUDA.reclaim()
+            end
+        end
+        return
     end
 
     function cudaRevScan(x, y, z)
@@ -388,7 +410,7 @@ module Sentinel
         for key in keyList
             if key != "CloudScreen"
                 if last(key, 8) == "Screened"
-                    file[key] = broadcast(Sentinel.scanMaxMerge, map((x) -> parent(x[key]), files)...);
+                    file[key] = broadcast(Sentinel.scanMerge, map((x) -> parent(x[key]), files)...);
                 end
             end
         end
@@ -434,10 +456,13 @@ module Sentinel
         mkpath(cache)
         cd(cache)
         println(cache)
-        println(isfile("cacheIndex.csv.gz"))
-        if isfile("cacheIndex.csv.gz") == true & update == false
+        isIt = isfile("cacheIndex.csv.gz")
+        println("There is an existing cacheIndex csv: $isIt")
+        if isfile("cacheIndex.csv.gz") == true && update == false
+            println("Opening cached csv")
             df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
         else 
+            println("Downloading new csv")
             obs = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", "L2/index.csv.gz")
             open("cacheIndex.csv.gz", "w") do file
                 write(file, obs)
@@ -535,13 +560,14 @@ module Sentinel
         return parsedTime
     end
     
-    function filterList(inputFile, mgrs, startDate, endDate; cover=10)
+    function filterList(inputFile, mgrs, startDate, endDate; cover=10, size=6.5*10^8)
         format = zulu()
         subsetDF = subset(inputFile, 
                                     :MGRS_TILE => ByRow(x -> x == mgrs),
                                     :CLOUD_COVER => ByRow(x -> x < cover),
                                     :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) > startDate),
-                                    :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) < endDate)
+                                    :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) < endDate),
+                                    :TOTAL_SIZE => ByRow(x -> x > size)
                                     )
         subsetDF = sort(subsetDF, (:CLOUD_COVER))
         return subsetDF
