@@ -17,7 +17,7 @@ module Sentinel
     using Base64
     using Glob
     using Dates
-
+    using LibGEOS
     export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
@@ -172,7 +172,7 @@ module Sentinel
 
     # Create Screen (CUDA Only)
 
-    function sentinelCloudScreen(targetFile, screenFile; b1Screen = 400, b2Screen = 750, b4Screen = 2000, cloudMaskScreen = 80, GPU=true, GPU_All = false)
+    function sentinelCloudScreen(targetFile, screenFile; b1Screen = 750, b2Screen = 1500, b4Screen = 1500, cloudMaskScreen = 80, GPU=true, GPU_All = false)
         #println("Starting Cloud Screen")
         # Users can pass either a string to the SAFE file location or preloaded Abstract Arrays
         if typeof(targetFile) == String
@@ -292,15 +292,28 @@ module Sentinel
     function generateScreens(files; b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, cloudMaskScreen = 20, GPU=false)
         for i in 1:length(files)
             fileA = files[i]
+    
+            # Check Geometries
+            aGeom = String(SubString(fileA["B2-10m"].filedata[17], 11, length(fileA["B2-10m"].filedata[17])))
+            aGeom_Ptr = LibGEOS._readgeom(aGeom)
             if i != length(files)
                 for j in i+1:length(files) 
                     fileB = files[j]
-                    targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
-                    haskey(fileA, "CloudScreen") == true ? fileA["CloudScreen"] = broadcast(cudaBitScan, fileA["CloudScreen"], screenScreen) : fileA["CloudScreen"] = screenScreen
-                    haskey(fileB, "CloudScreen") == true ? fileB["CloudScreen"] = broadcast(cudaBitScan, fileB["CloudScreen"], targetScreen) : fileB["CloudScreen"] = targetScreen
-                    targetScreen = nothing
-                    screenScreen = nothing
-                    fileB = nothing
+                    bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
+                    bGeom_Ptr = LibGEOS._readgeom(bGeom)
+                    compareGeoms = LibGEOS.geomArea(bGeom_Ptr) / LibGEOS.geomArea(aGeom_Ptr)
+                    @show compareGeoms
+                    if compareGeoms > .8 && compareGeoms < 1.2
+                        println("Comparable Geometries")
+                        targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
+                        haskey(fileA, "CloudScreen") == true ? fileA["CloudScreen"] = broadcast(cudaBitScan, fileA["CloudScreen"], screenScreen) : fileA["CloudScreen"] = screenScreen
+                        haskey(fileB, "CloudScreen") == true ? fileB["CloudScreen"] = broadcast(cudaBitScan, fileB["CloudScreen"], targetScreen) : fileB["CloudScreen"] = targetScreen
+                        targetScreen = nothing
+                        screenScreen = nothing
+                        fileB = nothing
+                    else 
+                        println("Not Comparable")
+                    end
                 end
             end
             fileA = nothing
@@ -335,7 +348,7 @@ module Sentinel
         return
     end
 
-    function scanMerge(x...; screen = 0) 
+    function scanMerge(x...; screen = 5) 
         count = 0
         y = convert(eltype(x[1]), 0)
         screen = convert(eltype(x[1]), screen)
@@ -410,7 +423,7 @@ module Sentinel
         for key in keyList
             if key != "CloudScreen"
                 if last(key, 8) == "Screened"
-                    file[key] = broadcast(Sentinel.scanMerge, map((x) -> parent(x[key]), files)...);
+                    file[key] = broadcast(scanMaxMerge, map((x) -> parent(x[key]), files)...);
                 end
             end
         end
