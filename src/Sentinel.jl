@@ -18,7 +18,9 @@ module Sentinel
     using Glob
     using Dates
     using LibGEOS
-    export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+    using Adapt
+    
+    export migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -96,6 +98,35 @@ module Sentinel
         return tifArray
     end
 
+    function migrateSafe(composite, target="CPU")
+        for (i, key) in enumerate(keys(composite))
+            if composite[key] != nothing
+                @show i, key
+                if has_metadata(composite[key]) == false
+                    if target == "CPU"
+                        #composite[key] = Array{type}(parent(composite[key]))
+                        composite[key] = adapt(Array, parent(composite[key]))
+                    else
+                        composite[key] = adapt(CuArray, parent(composite[key]))
+                        #composite[key] = CuArray{type}(parent(composite[key]))
+                    end
+                else
+                    meta = metadata(composite[key])
+                    @show meta
+                    if target == "CPU"
+                        #composite[key] = Array{type}(parent(composite[key]))
+                        composite[key] = adapt(Array, parent(composite[key]))
+                    else
+                        composite[key] = adapt(CuArray, parent(composite[key]))
+                        #composite[key] = CuArray{type}(parent(composite[key]))
+                    end
+                    composite[key] = attach_metadata(composite[key], meta)
+                end
+            end
+        end
+        #return composite
+    end
+
     # Scan Code for CUDA Screens
     scanInvert(x, z) = (x > convert(typeof(x), z) ? x = convert(typeof(x), 1) : x = convert(typeof(x), 0))
 
@@ -120,7 +151,6 @@ module Sentinel
                         keyName = split(i, "-")
                         if keyName[2] != "Screened" && keyName[2] != "10m"
                             file[i] = nothing
-                            
                         end
                     end
                 end
