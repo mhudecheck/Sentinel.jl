@@ -430,7 +430,7 @@ module Sentinel
             bandWidth = width(sourceFile)
             bandHeight = height(sourceFile)
             @show "Writing tif"
-            ArchGDAL.create(name; driver=ArchGDAL.getdriver("GTiff"), width=bandWidth, height=bandHeight, nbands=bandCount, dtype=type) do raster
+            ArchGDAL.create(name; driver=ArchGDAL.getdriver("GTiff"), width=bandWidth, height=bandHeight, nbands=bandCount, dtype=type, options = ["BIGTIFF=YES"]) do raster
                 ArchGDAL.setgeotransform!(raster, geoTransform)
                 ArchGDAL.setproj!(raster, ref)
                 for k in 1:bandCount
