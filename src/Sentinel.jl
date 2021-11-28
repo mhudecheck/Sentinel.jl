@@ -101,7 +101,7 @@ module Sentinel
     function migrateSafe(composite, target="CPU")
         for (i, key) in enumerate(keys(composite))
             if composite[key] != nothing
-                @show i, key
+                #@show i, key
                 if has_metadata(composite[key]) == false
                     if target == "CPU"
                         #composite[key] = Array{type}(parent(composite[key]))
@@ -112,7 +112,7 @@ module Sentinel
                     end
                 else
                     meta = metadata(composite[key])
-                    @show meta
+                    #@show meta
                     if target == "CPU"
                         #composite[key] = Array{type}(parent(composite[key]))
                         composite[key] = adapt(Array, parent(composite[key]))
@@ -332,7 +332,7 @@ module Sentinel
                     bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
                     bGeom_Ptr = LibGEOS._readgeom(bGeom)
                     compareGeoms = LibGEOS.geomArea(bGeom_Ptr) / LibGEOS.geomArea(aGeom_Ptr)
-                    @show compareGeoms
+                    #@show compareGeoms
                     if compareGeoms > .8 && compareGeoms < 1.2
                         println("Comparable Geometries")
                         targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
@@ -429,7 +429,7 @@ module Sentinel
 
             bandWidth = width(sourceFile)
             bandHeight = height(sourceFile)
-            @show "Writing tif"
+            @show "Writing tif for $name"
             ArchGDAL.create(name; driver=ArchGDAL.getdriver("GTiff"), width=bandWidth, height=bandHeight, nbands=bandCount, dtype=type, options = ["BIGTIFF=YES"]) do raster
                 ArchGDAL.setgeotransform!(raster, geoTransform)
                 ArchGDAL.setproj!(raster, ref)
@@ -684,7 +684,7 @@ module Sentinel
         safeBasicMetaData = ArchGDAL.metadata(safeMeta)
         pathGeom = ArchGDAL.metadataitem(safeMeta, "FOOTPRINT", domain="")
         noData = ArchGDAL.metadataitem(safeMeta, "NODATA_PIXEL_PERCENTAGE", domain="")
-        @show noData
+        #@show noData
         noData = parse.(Float32, noData)
         return pathGeom, noData
     end
