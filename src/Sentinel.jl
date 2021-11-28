@@ -18,7 +18,7 @@ module Sentinel
     using Glob
     using Dates
     using LibGEOS
-    export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel
+    export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -430,8 +430,6 @@ module Sentinel
         return file
     end
 
-    export generateCloudless, resizeCuda, linearkernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaInvert, cudaBitScan, scanMean, scanFind, scanGreaterThan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, scanMerge, scanMaxMerge, saveScreenedRasters
-
     function cloudDownload(location; writeFile = true)
         collData = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", location) 
         if writeFile == true
@@ -625,6 +623,93 @@ module Sentinel
         parDownload = pipeline(`cat links`, `xargs -d "\n" -P 15 -L 1 wget --content-disposition --continue --user=s5pguest --password=s5pguest`)
         run(parDownload)
         cd(currDir)
+    end
+
+    # Loads GEOTiffs
+    function loadRaster(tif; GPU=false)
+        finalImg = ArchGDAL.read(tif) do dataset
+            number_rasters = (ArchGDAL.nraster(dataset))
+            ref = ArchGDAL.getproj(dataset)
+            geotransform = ArchGDAL.getgeotransform(dataset)
+            firstBand = ArchGDAL.getband(dataset, 1)
+            width=ArchGDAL.width(firstBand)
+            height=ArchGDAL.height(firstBand)
+            finalDataset = Array{UInt16}(undef, width, height, number_rasters)
+            finalDataset[:, :, 1] = Array{UInt16}(ArchGDAL.read(firstBand))
+            for bandCounter in 2:number_rasters
+                bandInfo = ArchGDAL.getband(dataset, bandCounter)
+                GPU == true ? band = CuArray{Float16}(ArchGDAL.read(bandInfo)) : band = Array{UInt16}(ArchGDAL.read(bandInfo))
+                #band = Array{UInt16}(ArchGDAL.read(bandInfo))
+                finalDataset[:, :, bandCounter] = band
+            end
+            return finalDataset
+        end
+        return finalImg
+    end
+   
+    # Extracts Geometries from SAFE Files
+    function extractSAFEGeometries(safe)
+        origString = safe * "/MTD_MSIL2A.xml"
+        safeMeta = ArchGDAL.read(origString)
+        safeBasicMetaData = ArchGDAL.metadata(safeMeta)
+        pathGeom = ArchGDAL.metadataitem(safeMeta, "FOOTPRINT", domain="")
+        noData = ArchGDAL.metadataitem(safeMeta, "NODATA_PIXEL_PERCENTAGE", domain="")
+        @show noData
+        noData = parse.(Float32, noData)
+        return pathGeom, noData
+    end
+    
+    # Returns the directory path for a SAFE file
+    function generateSAFEPath(tile, directory, subDirectory="/L2/tiles")
+        a = tile[1:2]
+        b = tile[3]
+        c = tile[4:5]
+        path = directory * subDirectory * "/$a/$b/$c/"
+        return path
+    end
+
+    # Takes a list of SAFE directories, groups them by geometries, and returns them in sorted order (most -> lest recent)
+    function sortSAFE(tile, directory) 
+        path = generateSAFEPath(tile, directory)
+        safeList = readdir(path)
+        safeDF = DataFrame([safeList], :auto)
+        safeDF[!, :sort] = SubString.(safeList, 12, 19)
+        sort!(safeDF, :sort; rev=true)
+        safeList = safeDF[!, 1]
+        fileAGeom, fileANoData = extractSAFEGeometries(path * safeList[1]);
+        groupA = []
+        groupB = []
+        if fileANoData < 1
+            groupA = safeList    
+        else 
+            push!(groupA, safeList[1])
+            fileAGeom_Ptr = LibGEOS._readgeom(fileAGeom)
+            for i in 2:length(safeList)
+                fileBGeom, fileBNoData = extractSAFEGeometries(path * safeList[i])
+                fileBGeom_Ptr = LibGEOS._readgeom(fileBGeom)
+                compareGeoms = LibGEOS.geomArea(fileBGeom_Ptr) / LibGEOS.geomArea(fileAGeom_Ptr)
+                if .8 < compareGeoms < 1.2
+                    push!(groupA, safeList[i])
+                else 
+                    push!(groupB, safeList[i])
+                end
+            end
+        end
+        return groupA, groupB
+    end
+
+    # QC Function (% of no data obs) 
+
+    function qc(i)
+        y = 0
+        z = 0
+        for x in i
+            if floor(x) < 1
+                y = y+1
+            end
+            z = z + 1
+        end
+        return y/z
     end
 end
 
