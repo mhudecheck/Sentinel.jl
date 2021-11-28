@@ -18,7 +18,7 @@ module Sentinel
     using Glob
     using Dates
     using LibGEOS
-    export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc
+    export resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
