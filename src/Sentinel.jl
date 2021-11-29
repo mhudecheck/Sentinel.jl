@@ -710,7 +710,9 @@ module Sentinel
         fileAGeom, fileANoData = extractSAFEGeometries(path * safeList[1]);
         areaList = []
         if fileANoData < 1
-            safeDF[!, :group] .= 1  
+            safeDF[!, :group] .= 1 
+            a = safeDF 
+            b = similar(a, 0)
         else 
             geomPtr = LibGEOS._readgeom(fileAGeom)
             push!(areaList, LibGEOS.geomArea(geomPtr))
