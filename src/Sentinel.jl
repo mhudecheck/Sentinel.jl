@@ -700,35 +700,6 @@ module Sentinel
     end
 
     # Takes a list of SAFE directories, groups them by geometries, and returns them in sorted order (most -> lest recent)
-    #=function sortSAFE(tile, directory) 
-        path = generateSAFEPath(tile, directory)
-        safeList = readdir(path)
-        safeDF = DataFrame([safeList], :auto)
-        safeDF[!, :sort] = SubString.(safeList, 12, 19)
-        sort!(safeDF, :sort; rev=true)
-        safeList = safeDF[!, 1]
-        fileAGeom, fileANoData = extractSAFEGeometries(path * safeList[1]);
-        groupA = []
-        groupB = []
-        if fileANoData < 1
-            groupA = safeList    
-        else 
-            push!(groupA, safeList[1])
-            fileAGeom_Ptr = LibGEOS._readgeom(fileAGeom)
-            for i in 2:length(safeList)
-                fileBGeom, fileBNoData = extractSAFEGeometries(path * safeList[i])
-                fileBGeom_Ptr = LibGEOS._readgeom(fileBGeom)
-                compareGeoms = LibGEOS.geomArea(fileBGeom_Ptr) / LibGEOS.geomArea(fileAGeom_Ptr)
-                if .8 < compareGeoms < 1.2
-                    push!(groupA, safeList[i])
-                else 
-                    push!(groupB, safeList[i])
-                end
-            end
-        end
-        return groupA, groupB
-    end=#
-
     function sortSAFE(tile, directory) 
         path = generateSAFEPath(tile, directory)
         safeList = readdir(path)
@@ -797,4 +768,6 @@ module Sentinel
             z = z + 1
         end
         return y/z
-   
+    end
+end
+
