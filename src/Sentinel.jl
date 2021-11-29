@@ -737,7 +737,7 @@ module Sentinel
             grouped_df  = groupby(safeDF, "group")
             safeDF2 = combine(grouped_df, x -> nrow(x) < 3 ? DataFrame() : x)
             #nGroups = unique(y[!, :group])
-            nGroups = combine(groupby(z, [:group]), nrow => :count)
+            nGroups = combine(groupby(safeDF2, [:group]), nrow => :count)
             nGroups = sort(nGroups, :count)
             if nrow(nGroups) > 1
                 for j in 1:2
@@ -770,4 +770,3 @@ module Sentinel
         return y/z
     end
 end
-
