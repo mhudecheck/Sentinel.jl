@@ -19,7 +19,8 @@ module Sentinel
     using Dates
     using LibGEOS
     using Adapt
-    
+    using KernelDensity
+
     export migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
@@ -747,7 +748,7 @@ module Sentinel
                 geomPtr = LibGEOS._readgeom(fileBGeom)
                 push!(areaList, LibGEOS.geomArea(geomPtr))
             end
-            zed = kde(Vector{Float64}(areaList), npoints=4, boundary=(minimum(areaList),maximum(areaList)))
+            zed = KernelDensity.kde(Vector{Float64}(areaList), npoints=4, boundary=(minimum(areaList),maximum(areaList)))
             group = []
             @show zed.x[1], zed.x[2], zed.x[3], zed.x[4]
             for i in areaList
@@ -796,6 +797,4 @@ module Sentinel
             z = z + 1
         end
         return y/z
-    end
-end
-
+   
