@@ -147,7 +147,6 @@ module Sentinel
         for file in files
             if haskey(file, "CloudScreen")
                 for i in keys(file)
-                    println(i)
                     if i != "CloudScreen"
                         keyName = split(i, "-")
                         if keyName[2] != "Screened" && keyName[2] != "10m"
@@ -497,7 +496,7 @@ module Sentinel
         currentDirectory = pwd()
         mkpath(cache)
         cd(cache)
-        println(cache)
+        #println(cache)
         isIt = isfile("cacheIndex.csv.gz")
         println("There is an existing cacheIndex csv: $isIt")
         if isfile("cacheIndex.csv.gz") == true && update == false
