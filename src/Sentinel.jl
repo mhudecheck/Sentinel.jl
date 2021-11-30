@@ -749,13 +749,17 @@ module Sentinel
                         b = subset(safeDF2, :group => (x -> x .== (g)))
                     end
                 end
-            else 
+            elseif nrow(safeDF2) == 0
+                a = safeDF
+                b = similar(a, 0)
+            else
                 a = subset(safeDF2, :group => (x -> x .== (1)))
                 #a = safeDF2
                 b = similar(a, 0)
             end
         end
         return a[!, :x1], b[!, :x1]
+        #return a, b, safeDF, safeDF2
     end
 
     # QC Function (% of no data obs) 
