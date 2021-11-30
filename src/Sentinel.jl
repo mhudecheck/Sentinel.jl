@@ -750,7 +750,8 @@ module Sentinel
                     end
                 end
             else 
-                a = subset(safeDF2, :group => (x -> x .== (g)))
+                #a = subset(safeDF2, :group => (x -> x .== (1)))
+                a = safeDF2
                 b = similar(a, 0)
             end
         end
