@@ -865,9 +865,12 @@ module Sentinel
                         #composite[key] = CuArray{type}(parent(composite[key]))
                     end
                     composite[key] = attach_metadata(composite[key], meta)
+                    meta = nothing
                 end
             end
         end
-        #return composite
+        GC.gc()
+        CUDA.reclaim()
+        return composite
     end
 end
