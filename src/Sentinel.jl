@@ -21,7 +21,7 @@ module Sentinel
     using Adapt
     using KernelDensity
 
-    export migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+    export mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -656,7 +656,7 @@ module Sentinel
     end
 
     # Loads GEOTiffs
-    function (tif; GPU=false)
+    function loadRaster(tif; GPU=false)
         finalImg = ArchGDAL.read(tif) do dataset
             number_rasters = (ArchGDAL.nraster(dataset))
             ref = ArchGDAL.getproj(dataset)
@@ -684,9 +684,10 @@ module Sentinel
         safeBasicMetaData = ArchGDAL.metadata(safeMeta)
         pathGeom = ArchGDAL.metadataitem(safeMeta, "FOOTPRINT", domain="")
         noData = ArchGDAL.metadataitem(safeMeta, "NODATA_PIXEL_PERCENTAGE", domain="")
+        cloudCover = ArchGDAL.metadataitem(safeMeta, "CLOUD_COVERAGE_ASSESSMENT", domain="")
         #@show noData
         noData = parse.(Float32, noData)
-        return pathGeom, noData
+        return pathGeom, noData, cloudCover
     end
     
     # Returns the directory path for a SAFE file
@@ -707,22 +708,89 @@ module Sentinel
         sort!(safeDF, :sort; rev=true)
         safeList = safeDF[!, 1]
         areaList = []
-
-        # Run through the SAFE file geometries. If there are four or more that have 98%+ coverage, return Vector
+        pass = false
+        # Run through the SAFE file geometries and push results to a DataFrame
+        cDF = DataFrame(x1 = Any[], geom = Any[], noData = Any[], cloudCover = Any[])
         for safe in safeList
-            geom, noData = extractSAFEGeometries(path * safe);
-            if noData < 2
-                push!(areaList, safe)
-            end
+            geom, noData, cloudCover = extractSAFEGeometries(path * safe);
+            cloudCover = parse(Float64, cloudCover)
+            push!(cDF, [safe, geom, noData, cloudCover])
         end
 
-        # Check if length of files with 98%+ coverage is greater than three
-        if length(areaList) > 3
-            a = areaList[1:4]
+        # Subset DataFrame for all obs that = full tile and have less than 20% est. cloud cover
+        cDF2 = subset(cDF, 
+            :noData => ByRow(x -> x < 2),
+            :cloudCover => ByRow(x -> x < 20),
+        )
+
+        # Return full obs if there are enough to push to aggregation code (3 or more captures)
+        if nrow(cDF2) > 1
+            cDF2 = sort!(cDF2, :cloudCover)
+            a = cDF2[1:2, :x1]
             b = []
-            return a, b
-        else  
-            fileAGeom, fileANoData = extractSAFEGeometries(path * safeList[1]);
+            return a, nothing, nothing
+
+        # If not, extract all obs where cloud cover is less than est 20%
+        else
+            tileCounter = 0
+            tileMergeList = DataFrame(x1 = Any[], group=Any[])
+            cDF2 = subset(cDF, 
+                :cloudCover => ByRow(x -> x < 20),
+            )
+            cDF2 = sort!(cDF2, :noData)
+
+            if nrow(cDF2) > 1
+            # Map over remaining observations, merge geometries, and check if resulting merge == 100 % of tile area
+                geomPtr = LibGEOS._readgeom(cDF2[1, :geom])
+                for i in 2:nrow(cDF2)
+                    geomPtr1 = LibGEOS._readgeom(cDF2[i, :geom])
+                    tempUnion = LibGEOS.union(geomPtr, geomPtr1)
+                    geomArea = LibGEOS.geomArea(tempUnion)
+                    @info geomArea
+                    if geomArea > .98
+                        push!(tileMergeList, [cDF2[1, :x1], 1])
+                        push!(tileMergeList, [cDF2[1, :x1], 1])
+
+                        if cDF2[1, :cloudCover] > 5 
+                            delete!(cDF2, 1)
+                        else
+                            delete!(cDF2, i)
+                        end
+                        break
+                    end
+                end
+
+                # Repeat for loop a second time (Yes, this isn't how it should be done)
+                geomPtr = LibGEOS._readgeom(cDF2[1, :geom])
+                for i in 2:nrow(cDF2)
+                    geomPtr1 = LibGEOS._readgeom(cDF2[i, :geom])
+                    tempUnion = LibGEOS.union(geomPtr, geomPtr1)
+                    geomArea = LibGEOS.geomArea(tempUnion)
+                    @info geomArea
+                    if geomArea > .98
+                        push!(tileMergeList, [cDF2[1, :x1], 2])
+                        push!(tileMergeList, [cDF2[i, :x1], 2])
+                        #delete!(cDF2, 1)
+                        #delete!(cDF2, i)
+                        break
+                    end
+                end
+                if nrow(tileMergeList) > 3
+                    return nothing, nothing, tileMergeList
+                else
+                    pass = true
+                end
+            else 
+                pass = true
+            end
+        end
+        # Check if length of files with 98%+ coverage is greater than three
+        #if length(areaList) > 3
+        #    a = areaList[1:4]
+        #    b = []
+        #    return a, b
+        if pass == true  
+            fileAGeom, fileANoData, fileACloudCover = extractSAFEGeometries(path * safeList[1]);
             areaList = []
             if fileANoData < 1
                 safeDF[!, :group] .= 1 
@@ -738,7 +806,6 @@ module Sentinel
                 end
                 zed = KernelDensity.kde(Vector{Float64}(areaList), npoints=4, boundary=(minimum(areaList),maximum(areaList)))
                 group = []
-                @show zed.x[1], zed.x[2], zed.x[3], zed.x[4]
                 for i in areaList
                     if i <= zed.x[2]
                         a = 1
@@ -774,7 +841,7 @@ module Sentinel
                     b = similar(a, 0)
                 end
             end
-            return a[!, :x1], b[!, :x1]
+            return a[!, :x1], b[!, :x1], nothing
         end
         #return a, b, safeDF, safeDF2
     end
@@ -792,4 +859,14 @@ module Sentinel
         end
         return y/z
     end
+
+    function mergeSAFE(files...)
+        file = copy(files[1])
+        keyList = keys(file)
+        for key in keyList
+            file[key] = broadcast(Sentinel.scanMaxMerge, map((x) -> parent(x[key]), files)...);
+        end
+        return file
+    end
+
 end
