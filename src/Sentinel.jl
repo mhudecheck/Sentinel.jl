@@ -656,7 +656,7 @@ module Sentinel
     end
 
     # Loads GEOTiffs
-    function loadRaster(tif; GPU=false)
+    function (tif; GPU=false)
         finalImg = ArchGDAL.read(tif) do dataset
             number_rasters = (ArchGDAL.nraster(dataset))
             ref = ArchGDAL.getproj(dataset)
@@ -706,59 +706,76 @@ module Sentinel
         safeDF[!, :sort] = SubString.(safeList, 12, 19)
         sort!(safeDF, :sort; rev=true)
         safeList = safeDF[!, 1]
-        fileAGeom, fileANoData = extractSAFEGeometries(path * safeList[1]);
         areaList = []
-        if fileANoData < 1
-            safeDF[!, :group] .= 1 
-            a = safeDF 
-            b = similar(a, 0)
-        else 
-            geomPtr = LibGEOS._readgeom(fileAGeom)
-            push!(areaList, LibGEOS.geomArea(geomPtr))
-            for i in 2:length(safeList)
-                fileBGeom, fileBNoData = extractSAFEGeometries(path * safeList[i])
-                geomPtr = LibGEOS._readgeom(fileBGeom)
-                push!(areaList, LibGEOS.geomArea(geomPtr))
-            end
-            zed = KernelDensity.kde(Vector{Float64}(areaList), npoints=4, boundary=(minimum(areaList),maximum(areaList)))
-            group = []
-            @show zed.x[1], zed.x[2], zed.x[3], zed.x[4]
-            for i in areaList
-                if i <= zed.x[2]
-                    a = 1
-                elseif zed.x[2] < i <= zed.x[3]
-                    a = 2
-                else
-                    a = 3
-                end
-                push!(group, a)
-            end
-            safeDF[!, :group] = group
-            safeDF[!, :area] = areaList
-            grouped_df  = groupby(safeDF, "group")
-            safeDF2 = combine(grouped_df, x -> nrow(x) < 3 ? DataFrame() : x)
-            #nGroups = unique(y[!, :group])
-            nGroups = combine(groupby(safeDF2, [:group]), nrow => :count)
-            nGroups = sort(nGroups, :count)
-            if nrow(nGroups) > 1
-                for j in 1:2
-                    g = nGroups[j, :group]
-                    if j == 1
-                        a = subset(safeDF2, :group => (x -> x .== (g)))
-                    elseif j == 2
-                        b = subset(safeDF2, :group => (x -> x .== (g)))
-                    end
-                end
-            elseif nrow(safeDF2) == 0
-                a = safeDF
-                b = similar(a, 0)
-            else
-                a = subset(safeDF2, :group => (x -> x .== (1)))
-                #a = safeDF2
-                b = similar(a, 0)
+
+        # Run through the SAFE file geometries. If there are four or more that have 98%+ coverage, return Vector
+        for safe in safeList
+            geom, noData = extractSAFEGeometries(path * safe);
+            if noData < 2
+                push!(areaList, safe)
             end
         end
-        return a[!, :x1], b[!, :x1]
+
+        # Check if length of files with 98%+ coverage is greater than three
+        if length(areaList) > 3
+            a = areaList[1:4]
+            b = []
+            return a, b
+        else  
+            fileAGeom, fileANoData = extractSAFEGeometries(path * safeList[1]);
+            areaList = []
+            if fileANoData < 1
+                safeDF[!, :group] .= 1 
+                a = safeDF 
+                b = similar(a, 0)
+            else 
+                geomPtr = LibGEOS._readgeom(fileAGeom)
+                push!(areaList, LibGEOS.geomArea(geomPtr))
+                for i in 2:length(safeList)
+                    fileBGeom, fileBNoData = extractSAFEGeometries(path * safeList[i])
+                    geomPtr = LibGEOS._readgeom(fileBGeom)
+                    push!(areaList, LibGEOS.geomArea(geomPtr))
+                end
+                zed = KernelDensity.kde(Vector{Float64}(areaList), npoints=4, boundary=(minimum(areaList),maximum(areaList)))
+                group = []
+                @show zed.x[1], zed.x[2], zed.x[3], zed.x[4]
+                for i in areaList
+                    if i <= zed.x[2]
+                        a = 1
+                    elseif zed.x[2] < i <= zed.x[3]
+                        a = 2
+                    else
+                        a = 3
+                    end
+                    push!(group, a)
+                end
+                safeDF[!, :group] = group
+                safeDF[!, :area] = areaList
+                grouped_df  = groupby(safeDF, "group")
+                safeDF2 = combine(grouped_df, x -> nrow(x) < 3 ? DataFrame() : x)
+                #nGroups = unique(y[!, :group])
+                nGroups = combine(groupby(safeDF2, [:group]), nrow => :count)
+                nGroups = sort(nGroups, :count)
+                if nrow(nGroups) > 1
+                    for j in 1:2
+                        g = nGroups[j, :group]
+                        if j == 1
+                            a = subset(safeDF2, :group => (x -> x .== (g)))
+                        elseif j == 2
+                            b = subset(safeDF2, :group => (x -> x .== (g)))
+                        end
+                    end
+                elseif nrow(safeDF2) == 0
+                    a = safeDF
+                    b = similar(a, 0)
+                else
+                    a = subset(safeDF2, :group => (x -> x .== (1)))
+                    #a = safeDF2
+                    b = similar(a, 0)
+                end
+            end
+            return a[!, :x1], b[!, :x1]
+        end
         #return a, b, safeDF, safeDF2
     end
 
