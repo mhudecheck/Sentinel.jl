@@ -849,8 +849,10 @@ module Sentinel
                 if has_metadata(composite[key]) == false
                     if target == "CPU"
                         #composite[key] = Array{type}(parent(composite[key]))
+                        @info typeof(parent(composite[key])), typeof(composite[key]), key
                         tmp = adapt(Array, parent(composite[key]))
-                        CUDA.unsafe_free!(composite[key])
+                        @info typeof(parent(composite[key]))
+                        #CUDA.unsafe_free!(composite[key])
                         composite[key] = tmp
                     else
                         composite[key] = adapt(CuArray, parent(composite[key]))
@@ -861,10 +863,14 @@ module Sentinel
                     #@show meta
                     if target == "CPU"
                         #composite[key] = Array{type}(parent(composite[key]))
+                        @info typeof(parent(composite[key])), typeof(composite[key]), key
+
                         composite[key] = adapt(Array, parent(composite[key]))
                         tmp = adapt(Array, parent(composite[key]))
-                        CUDA.unsafe_free!(composite[key])
+                        @info typeof(tmp)
+                        #CUDA.unsafe_free!(composite[key])
                         composite[key] = tmp
+                        @info typeof(composite[key])
                     else
                         composite[key] = adapt(CuArray, parent(composite[key]))
                         #composite[key] = CuArray{type}(parent(composite[key]))
@@ -874,8 +880,8 @@ module Sentinel
                 end
             end
         end
-        #GC.gc()
-        #CUDA.reclaim()
+        GC.gc()
+        CUDA.reclaim()
         #return composite
     end
 end
