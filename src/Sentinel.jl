@@ -21,7 +21,7 @@ module Sentinel
     using Adapt
     using KernelDensity
 
-    export mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+    export safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -61,6 +61,62 @@ module Sentinel
 
     function pn(x) 
         @printf "%f" maximum(x)
+    end
+
+    # Downloads SAFE metadata xml and extracts geoms and nodata value
+    
+    function safeCoverageData(location)
+        downloadStrings = replace(location, r"gs://gcp-public-data-sentinel-2/" => "")
+        collData = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", downloadStrings * "/MTD_MSIL2A.xml") 
+        io = IOBuffer();
+        write(io, collData);
+        fileList = String(take!(io));
+        safeMeta = LightXML.parse_string(fileList)
+        a = root(safeMeta)
+        b = child_nodes(a)
+        n = ""
+        m = ""
+        for (i, elm) in enumerate(b)
+            if LightXML.name(elm) == "Geometric_Info"
+                for (j, cElm) in enumerate(child_nodes(elm))
+                    if LightXML.name(cElm) == "Product_Footprint"
+                        for (k, dElm) in enumerate(child_nodes(cElm))
+                            if LightXML.name(dElm) == "Product_Footprint"
+                                for (l, eElm) in enumerate(child_nodes(dElm))
+                                    if LightXML.name(eElm) == "Global_Footprint"
+                                        n = strip(content(eElm))
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            elseif LightXML.name(elm) == "Quality_Indicators_Info"
+                for (j, cElm) in enumerate(child_nodes(elm))
+                    if LightXML.name(cElm) == "Image_Content_QI"      
+                        for (k, dElm) in enumerate(child_nodes(cElm))
+                            if LightXML.name(dElm) == "NODATA_PIXEL_PERCENTAGE"
+                                m = strip(content(dElm))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        s = split(n, " ")
+        s[(1:length(s)) .% 2 .!= 0] .* " " .* s[(1:length(s)) .% 2 .!= 1] .* ","
+        h = hcat(s[(1:length(s)) .% 2 .!= 0], s[(1:length(s)) .% 2 .!= 1])
+        i = 0
+        cArray = Vector{Float64}[]
+        for i in 1:size(h)[1]
+            l, r =  parse(Float64, String(h[i, 1])), parse(Float64, String(h[i, 2]))
+            @info l, r
+            push!(cArray, [l, r])
+        end
+        @info cArray
+        polygon = LibGEOS.Polygon(LibGEOS.coordinates([cArray]))
+        noData = parse(Float64, m)
+        return noData, polygon
     end
 
     function loadSentinel(tif; GPU=false)
@@ -418,14 +474,18 @@ module Sentinel
         end
     end
 
-    function generateCloudless(files...)
+    function generateCloudless(files...; scan="max")
         file = copy(files[1])
         keyList = keys(file)
         for key in keyList
             if key != "CloudScreen"
                 if last(key, 8) == "Screened"
-                    file[key] = broadcast(scanMaxMerge, map((x) -> parent(x[key]), files)...);
-                end
+                    if scan == "max"
+                        file[key] = broadcast(scanMaxMerge, map((x) -> parent(x[key]), files)...);
+                    elseif scan == "mean"
+                        file[key] = broadcast(scanMerge, map((x) -> parent(x[key]), files)...);
+                    end
+              end
             end
         end
         return file
