@@ -65,9 +65,9 @@ module Sentinel
 
     # Downloads SAFE metadata xml and extracts geoms and nodata value
     
-    function safeCoverageData(location)
+    function safeCoverageData(location; target="L2A")
         downloadStrings = replace(location, r"gs://gcp-public-data-sentinel-2/" => "")
-        collData = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", downloadStrings * "/MTD_MSIL2A.xml") 
+        collData = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", downloadStrings * "/MTD_MSI$target.xml") 
         io = IOBuffer();
         write(io, collData);
         fileList = String(take!(io));
@@ -119,9 +119,17 @@ module Sentinel
         return noData, polygon
     end
 
-    function loadSentinel(tif; GPU=false)
+    function scanNorm(x, maxVal)
+        nullVal = convert(eltype(x), 0)
+        if x != nullVal
+            x = x / maxVal
+        end
+        return x
+    end
+
+    function loadSentinel(tif; GPU=false, normalize=false, target="L2A")
         tifArray = Dict()
-        origString = tif * "/MTD_MSIL2A.xml"
+        origString = tif * "/MTD_MSI$target.xml"
         safeMeta = ArchGDAL.read(origString)
         safeBasicMetaData = ArchGDAL.metadata(safeMeta)
         fileNames = ArchGDAL.metadata(safeMeta; domain="SUBDATASETS")
@@ -139,6 +147,13 @@ module Sentinel
                         bandInfo = ArchGDAL.getband(dataset, bandCounter)
                         metaDataItem = ArchGDAL.metadataitem(bandInfo, "BANDNAME", domain="")
                         GPU == true ? band = CuArray{Float16}(ArchGDAL.read(bandInfo)) : band = Array{Int32}(ArchGDAL.read(bandInfo))
+                        
+                        # Assumes that minimum band value is always == or ~= 0.0
+                        if normalize == true && metaDataItem[1] == 'B'
+                            maxPixel = CUDA.findmax(band)
+                            band = broadcast(scanNorm, band, maxPixel[1])
+                        end
+
                         bandMetaData = Dict("band_data" => ArchGDAL.metadata(bandInfo), 
                                             "location" =>  ArchGDAL.metadata(bandInfo; domain="LocationInfo"), 
                                             "image_structure" => ArchGDAL.metadata(bandInfo; domain="IMAGE_STRUCTURE"#, 
@@ -523,7 +538,7 @@ module Sentinel
         end
     end
 
-    function safeList(; cache="/.img_cache", update=true)
+    function safeList(; cache="/.img_cache", update=true, level="L2")
         currentDirectory = pwd()
         mkpath(cache)
         cd(cache)
@@ -535,7 +550,12 @@ module Sentinel
             df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
         else 
             println("Downloading new csv")
-            obs = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", "L2/index.csv.gz")
+            if level == "L2"
+                addr = "L2/index.csv.gz"
+            else
+                addr = "index.csv.gz"
+            end
+            obs = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", addr)
             open("cacheIndex.csv.gz", "w") do file
                 write(file, obs)
             end
@@ -709,8 +729,8 @@ module Sentinel
     end
    
     # Extracts Geometries from SAFE Files
-    function extractSAFEGeometries(safe)
-        origString = safe * "/MTD_MSIL2A.xml"
+    function extractSAFEGeometries(safe; target="L2A")
+        origString = safe * "/MTD_MSI$target.xml"
         safeMeta = ArchGDAL.read(origString)
         safeBasicMetaData = ArchGDAL.metadata(safeMeta)
         pathGeom = ArchGDAL.metadataitem(safeMeta, "FOOTPRINT", domain="")
@@ -722,7 +742,7 @@ module Sentinel
     end
     
     # Returns the directory path for a SAFE file
-    function generateSAFEPath(tile, directory, subDirectory="/L2/tiles")
+    function generateSAFEPath(tile, directory; subDirectory="/L2/tiles")
         a = tile[1:2]
         b = tile[3]
         c = tile[4:5]
@@ -731,8 +751,8 @@ module Sentinel
     end
 
     # Takes a list of SAFE directories, groups them by geometries, and returns them in sorted order (most -> lest recent)
-    function sortSAFE(tile, directory) 
-        path = generateSAFEPath(tile, directory)
+    function sortSAFE(tile, directory; subDirectory="/L2/tiles") 
+        path = generateSAFEPath(tile, directory; subDirectory=target)
         safeList = readdir(path)
         safeDF = DataFrame([safeList], :auto)
         safeDF[!, :sort] = SubString.(safeList, 12, 19)
