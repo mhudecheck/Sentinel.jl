@@ -115,7 +115,11 @@ module Sentinel
         end
         @info cArray
         polygon = LibGEOS.Polygon(LibGEOS.coordinates([cArray]))
-        noData = parse(Float64, m)
+        if m != ""
+            noData = parse(Float64, m)
+        else
+            noData = 0.0 # L1C No Data Value 
+        end        
         return noData, polygon
     end
 
@@ -549,10 +553,11 @@ module Sentinel
             println("Opening cached csv")
             df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
         else 
-            println("Downloading new csv")
             if level == "L2"
+                @info "Downloading L2A CSV Index"
                 addr = "L2/index.csv.gz"
             else
+                @info "Downloading L1C CSV Index"
                 addr = "index.csv.gz"
             end
             obs = GoogleCloud.storage(:Object, :get, "gcp-public-data-sentinel-2", addr)
@@ -652,14 +657,15 @@ module Sentinel
         return parsedTime
     end
     
-    function filterList(inputFile, mgrs, startDate, endDate; cover=10, size=6.5*10^8)
+    function filterList(inputFile, mgrs, startDate, endDate; cover=10, size=6.5*10^8, skipMissing = true)
         format = zulu()
         subsetDF = subset(inputFile, 
                                     :MGRS_TILE => ByRow(x -> x == mgrs),
                                     :CLOUD_COVER => ByRow(x -> x < cover),
                                     :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) > startDate),
                                     :SENSING_TIME => ByRow(x -> parseSentinelTime(x, format) < endDate),
-                                    :TOTAL_SIZE => ByRow(x -> x > size)
+                                    :TOTAL_SIZE => ByRow(x -> x > size),
+                                    skipmissing = skipMissing,
                                     )
         subsetDF = sort(subsetDF, (:CLOUD_COVER))
         return subsetDF
