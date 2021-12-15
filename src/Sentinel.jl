@@ -248,7 +248,7 @@ module Sentinel
 
     # Create Screen (CUDA Only)
 
-    function sentinelCloudScreen(targetFile, screenFile; b1Screen = 750, b2Screen = 1500, b4Screen = 1500, cloudMaskScreen = 80, GPU=true, GPU_All = false)
+    function sentinelCloudScreen(targetFile, screenFile; type="L2", b1Screen = 750, b2Screen = 1500, b4Screen = 1500, b10Screen = 1500, cloudMaskScreen = 80, GPU=true, GPU_All = false)
         #println("Starting Cloud Screen")
         # Users can pass either a string to the SAFE file location or preloaded Abstract Arrays
         if typeof(targetFile) == String
@@ -260,21 +260,27 @@ module Sentinel
             imageBandsA = targetFile
             imageBandsB = screenFile
         end
-
-        function processScreens(imageBands1, imageBands2; GPU=true, GPU_All = false)
+    
+        function processScreens(imageBands1, imageBands2; type = "L2", GPU=true, GPU_All = false)
             #println("Processing Cloud Screens")
             # Loads B1, B2, B4, B9, Cloud Screen, and Surface Classification (Cirrus Cloud Detection)
             b1 = parent(imageBands1["B1-60m"])
             b2 = parent(imageBands2["B1-60m"])
             #n1 = parent(imageBands1["B9-60m"])
             #n2 = parent(imageBands2["B9-60m"])
-            c2 = parent(imageBands2["CLD-60m"])
-            s2 = parent(imageBands2["SCL-60m"])
             bl1 = parent(imageBands1["B2-10m"])
             bl2 = parent(imageBands2["B2-10m"])
             r1 = parent(imageBands1["B4-10m"])
             r2 = parent(imageBands2["B4-10m"])
-
+    
+            if type == "L2"
+                c2 = parent(imageBands2["CLD-60m"])
+                s2 = parent(imageBands2["SCL-60m"])
+            else
+                n1 = parent(imageBands1["B9-60m"])
+                n2 = parent(imageBands2["B9-60m"])
+            end
+    
             if GPU_All == false
                 #println("CPU")
                 # Apply B1 Time Screen
@@ -282,31 +288,36 @@ module Sentinel
                 t1a = BitArray(zeros(width(t1), height(t1)))
                 tvec = findall(t1 .> b1Screen)
                 t1a[tvec] .= 1
-
-                # Apply B9 Time Screen
-                #nScreen = n2 - n1
-                #nVec = findall(nScreen .> b9Screen)
-                #t1a[nVec] .= 1
-
-                # Apply Sen2Cor Cloud Mask Screen
-                cvec = findall(c2 .> cloudMaskScreen)
-                t1a[cvec] .= 1
-
-                # Apply Cirrus Cloud Screen
-                t1a = .!t1a
-                t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
-                
-                # Process Cloud Screen - Cloud Masks are always at 10m
-                GPU == true ? cloudScreen = resizeCuda(CuArray(Array{Float16}(t1a)), width(r1), height(r1); interpolation=false) : cloudScreen = Images.imresize(t1a, width(r1), height(r1));
-                testVec = findall(cloudScreen .< 1)
-                cloudScreen[testVec] .= 0
-                cloudScreen = BitArray(cloudScreen)
-
+    
+                if type == "L2"
+                    # Apply Sen2Cor Cloud Mask Screen
+                    cvec = findall(c2 .> cloudMaskScreen)
+                    t1a[cvec] .= 1
+    
+                    # Apply Cirrus Cloud Screen
+                    t1a = .!t1a
+                    t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
+                    
+                    # Process Cloud Screen - Cloud Masks are always at 10m
+                    GPU == true ? cloudScreen = resizeCuda(CuArray(Array{Float16}(t1a)), width(r1), height(r1); interpolation=false) : cloudScreen = Images.imresize(t1a, width(r1), height(r1));
+                    testVec = findall(cloudScreen .< 1)
+                    cloudScreen[testVec] .= 0
+                    cloudScreen = BitArray(cloudScreen)
+                else 
+                    # Apply B10 Time Screen
+                    nScreen = n2 - n1
+                    nVec = findall(nScreen .> b10Screen)
+                    t1a[nVec] .= 1
+                    t1a = .!t1a
+                    GPU == true ? cloudScreen = resizeCuda(CuArray(Array{Float16}(t1a)), width(r1), height(r1); interpolation=false) : cloudScreen = Images.imresize(t1a, width(r1), height(r1));
+                    cloudScreen = BitArray(cloudScreen)
+                end
+        
                 # Apply B2 Time Screen
                 bScreen = bl2 - bl1
                 blVec = findall(bScreen .> b2Screen)
                 cloudScreen[blVec] .= 0
-
+    
                 # Apply B4 Time Screen
                 rScreen = r2 - r1
                 rVec = findall(rScreen .> b4Screen)
@@ -314,29 +325,36 @@ module Sentinel
                 return cloudScreen
             else 
                 #println("GPU")
-
+    
                 # Apply B1 Time Screen
                 t1 = b2 - b1
                 t1a = broadcast(cudaScan, t1, 1.0, b1Screen)
-
+    
                 # Apply B9 Time Screen
                 #nScreen = n2 - n1
                 #t1a = broadcast(cudaScan, nScreen, t1a, b9Screen)
-
-                # Apply Sen2Cor Cloud Mask Screen
-                t1a = broadcast(cudaScan, c2, t1a, cloudMaskScreen)
-
-                # Apply Cirrus Cloud Screen
-                t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
-
-                # Process Cloud Screen - Cloud Masks are always at 10m
-                cloudScreen = resizeCuda(CuArray{Float16}(t1a), width(r1), height(r1); returnGPU = true);
-                cloudScreen = broadcast(cudaCirrusScan, cloudScreen, cloudScreen, 1, 1)
-
+    
+                if type == "L2"
+                    # Apply Sen2Cor Cloud Mask Screen
+                    t1a = broadcast(cudaScan, c2, t1a, cloudMaskScreen)
+    
+                    # Apply Cirrus Cloud Screen
+                    t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
+    
+                    # Process Cloud Screen - Cloud Masks are always at 10m
+                    cloudScreen = resizeCuda(CuArray{Float16}(t1a), width(r1), height(r1); returnGPU = true);
+                    cloudScreen = broadcast(cudaCirrusScan, cloudScreen, cloudScreen, 1, 1)
+                else
+                    # Apply B10 Screen
+                    nScreen = n2 - n1
+                    t1a = broadcast(cudaScan, nScreen, t1a, b10Screen)
+                    cloudScreen = resizeCuda(CuArray{Float16}(t1a), width(r1), height(r1); returnGPU = true);
+                end
+    
                 # Apply B2 Time Screen
                 bScreen = bl2 - bl1
                 cloudScreen = broadcast(cudaScan, bScreen, cloudScreen, b2Screen)
-
+    
                 # Apply B4 Time Screen
                 rScreen = r2 - r1
                 cloudScreen = broadcast(cudaScan, rScreen, cloudScreen, b4Screen)
@@ -351,11 +369,16 @@ module Sentinel
                 bl2 = nothing
                 r1 = nothing
                 r2 = nothing
+                if type != "L2"
+                    n1 = nothing
+                    n2 = nothing
+                    nscreen = nothing
+                end
                 return cloudScreen
             end
         end
-        screenOne = processScreens(imageBandsA, imageBandsB; GPU=GPU, GPU_All=GPU_All)
-        screenTwo = processScreens(imageBandsB, imageBandsA; GPU=GPU, GPU_All=GPU_All)
+        screenOne = processScreens(imageBandsA, imageBandsB; GPU=GPU, GPU_All=GPU_All, type=type)
+        screenTwo = processScreens(imageBandsB, imageBandsA; GPU=GPU, GPU_All=GPU_All, type=type)
         if GPU_All == true
             imageBandsA = nothing
             imageBandsB = nothing
@@ -365,25 +388,39 @@ module Sentinel
         return screenOne, screenTwo 
     end
 
-    function generateScreens(files; b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, cloudMaskScreen = 20, GPU=false)
+    function generateScreens(files; type="L2", b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, b10Screen = 1500, cloudMaskScreen = 20, GPU=false)
+        @info type
         for i in 1:length(files)
             fileA = files[i]
     
             # Check Geometries
-            aGeom = String(SubString(fileA["B2-10m"].filedata[17], 11, length(fileA["B2-10m"].filedata[17])))
-            aGeom_Ptr = LibGEOS._readgeom(aGeom)
+            if type != "L2"
+                aGeom = String(SubString(fileA["B2-10m"].filedata[10], 11, length(fileA["B2-10m"].filedata[10])))
+                aGeom_Ptr = LibGEOS._readgeom(aGeom)
+            else
+                aGeom = String(SubString(fileA["B2-10m"].filedata[17], 11, length(fileA["B2-10m"].filedata[17])))
+                aGeom_Ptr = LibGEOS._readgeom(aGeom)
+            end
             if i != length(files)
                 for j in i+1:length(files) 
                     fileB = files[j]
-                    bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
+                    @info fileB["B2-10m"].filedata[10]
+                    if type != "L2"
+                        bGeom = String(SubString(fileB["B2-10m"].filedata[10], 11, length(fileB["B2-10m"].filedata[10])))
+                    else
+                        bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
+                    end
+                    @info bGeom
                     bGeom_Ptr = LibGEOS._readgeom(bGeom)
                     compareGeoms = LibGEOS.geomArea(bGeom_Ptr) / LibGEOS.geomArea(aGeom_Ptr)
                     #@show compareGeoms
                     if compareGeoms > .8 && compareGeoms < 1.2
                         println("Comparable Geometries")
-                        targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
+                        targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; type = type, b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, b10Screen = b10Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
+                        #if type != "L1C"
                         haskey(fileA, "CloudScreen") == true ? fileA["CloudScreen"] = broadcast(cudaBitScan, fileA["CloudScreen"], screenScreen) : fileA["CloudScreen"] = screenScreen
                         haskey(fileB, "CloudScreen") == true ? fileB["CloudScreen"] = broadcast(cudaBitScan, fileB["CloudScreen"], targetScreen) : fileB["CloudScreen"] = targetScreen
+                        #end
                         targetScreen = nothing
                         screenScreen = nothing
                         fileB = nothing
