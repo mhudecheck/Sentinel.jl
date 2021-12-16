@@ -441,7 +441,7 @@ module Sentinel
         end
     end
 
-    function applyScreens(files; GPU = false, normalize=false, target=""; merge=false) 
+    function applyScreens(files; GPU = false, normalize=false, target="", merge=false) 
         for file in files
             if haskey(file, "CloudScreen")
                 for i in keys(file)
