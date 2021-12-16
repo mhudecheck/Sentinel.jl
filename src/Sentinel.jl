@@ -967,6 +967,7 @@ module Sentinel
     end
 
     function mergeSAFE(files...; normalize=false)
+        CUDA.allowscalar(true)
         file = copy(files[1])
         keyList = keys(file)
         for key in keyList
@@ -980,13 +981,13 @@ module Sentinel
                     tmpA = nothing
                     tmpB = nothing
                 end
-                file[key] = broadcast(rastMean, cArray...);
+                file[key] = broadcast(rastNormMean, cArray...);
                 for i in cArray
                     i = nothing
                 end
                 cArray = nothing
             else
-                file[key] = broadcast(rastMean, map((x) -> parent(x[key]), files)...);
+                file[key] = broadcast(rastNormMean, map((x) -> parent(x[key]), files)...);
             end
             file[key] = attach_metadata(file[key], meta); 
         end
@@ -994,8 +995,8 @@ module Sentinel
     end
 
     function normalizeRasters(x, y; nSample = 1000, merge=true)
-        xSample = Turing.sample(x, nSample);
-        ySample = Turing.sample(y, nSample);
+        CUDA.@allowscalar xSample = Turing.sample(x, nSample);
+        CUDA.@allowscalar ySample = Turing.sample(y, nSample);
         if minimum(xSample) < maximum(xSample)
             dist = KernelDensity.kde(xSample, npoints=4, boundary=(minimum(xSample), maximum(xSample)));
             a = rastNormMean(xSample, dist.x[1], dist.x[2]);
@@ -1008,6 +1009,12 @@ module Sentinel
         else 
             retRaster = x
         end
+        x = nothing
+        a = nothing
+        b = nothing
+        throttle = nothing
+        xSample = nothing
+        ySample = nothing
         return retRaster
     end
 
