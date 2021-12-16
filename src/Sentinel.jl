@@ -602,7 +602,7 @@ module Sentinel
         println("There is an existing cacheIndex csv: $isIt")
         if isfile("cacheIndex.csv.gz") == true && update == false
             println("Opening cached csv")
-            df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
+            df = DataFrame(load(File(format="CSV", "cacheIndex.csv.gz")))
         else 
             if level == "L2"
                 @info "Downloading L2A CSV Index"
@@ -615,7 +615,7 @@ module Sentinel
             open("cacheIndex.csv.gz", "w") do file
                 write(file, obs)
             end
-            df = DataFrame(load(File(format"CSV", "cacheIndex.csv.gz")))
+            df = DataFrame(load(File(format="CSV", "cacheIndex.csv.gz")))
         end
         cd(currentDirectory)
         return df
