@@ -223,7 +223,13 @@ module Sentinel
 
     cudaBitScan(x,y) = (x == convert(typeof(x), 0) || y == convert(typeof(x), 0) ? convert(typeof(x), 0) : convert(typeof(x), 1))
 
-    scanMean(x, y) = ((x+y)/ convert(typeof(y), 2))
+    #scanMean(x, y) = ((x+y)/ convert(typeof(y), 2))
+    function scanMean(x, y)
+        x = convert(typeof(y), x)
+        z = Float64(0)
+        z = (x + y) / convert(typeof(y), 2)
+        return z
+    end
 
     scanFind(x, y) = (x == convert(typeof(x), y) ? x : convert(typeof(x), 0))
 
@@ -451,6 +457,7 @@ module Sentinel
                             tmpScreen = parent(file[i])
                             if normalize == true 
                                 targetScreen = parent(target[i])
+                                @info i
                                 tmpScreen = normalizeRasters(tmpScreen, targetScreen; merge=merge)
                                 targetScreen = nothing
                             end
@@ -472,7 +479,7 @@ module Sentinel
         return
     end
 
-    function scanMerge(x...; screen = 5) 
+    function scanMerge(x...; screen = 1) 
         count = 0
         y = convert(eltype(x[1]), 0)
         screen = convert(eltype(x[1]), screen)
@@ -973,6 +980,7 @@ module Sentinel
         for key in keyList
             meta = metadata(file[key]);
             if normalize == true
+                @info key
                 cArray = []
                 for i in 2:length(files)
                     tmpA = parent(files[i][key])
@@ -981,7 +989,11 @@ module Sentinel
                     tmpA = nothing
                     tmpB = nothing
                 end
-                file[key] = broadcast(rastNormMean, cArray...);
+                if length(cArray) == 1
+                    file[key] = cArray[1]
+                else
+                    file[key] = broadcast(scanMaxMerge, cArray...);
+                end
                 for i in cArray
                     i = nothing
                 end
@@ -994,17 +1006,20 @@ module Sentinel
         return file
     end
 
-    function normalizeRasters(x, y; nSample = 1000, merge=true)
+    function normalizeRasters(x, y; nSample = 20000, merge=true)
         CUDA.@allowscalar xSample = Turing.sample(x, nSample);
         CUDA.@allowscalar ySample = Turing.sample(y, nSample);
         if minimum(xSample) < maximum(xSample)
             dist = KernelDensity.kde(xSample, npoints=4, boundary=(minimum(xSample), maximum(xSample)));
             a = rastNormMean(xSample, dist.x[1], dist.x[2]);
             b = rastNormMean(ySample, dist.x[1], dist.x[2]);
-            throttle = b/a;
+            throttle = Float16(b/a);
+            @info throttle, a, b, minimum(xSample), maximum(xSample), minimum(ySample), maximum(ySample)
             retRaster = broadcast(*, x, throttle);
             if merge == true
-                retRaster = broadcast(scanRastMean, retRaster, y);
+                #retRaster = broadcast(scanRastMean, retRaster, y);
+                #retRaster = broadcast(rastNormMean, retRaster, y);
+                retRaster = broadcast(scanMerge, retRaster, y);
             end
         else 
             retRaster = x
@@ -1055,6 +1070,61 @@ module Sentinel
         CUDA.reclaim()
         #return composite
     end
+
+
+    function scanRastMean(x, y)
+        c = Float64(x)
+        z = convert(typeof(y), 0)
+        if x != z && y != z
+            c = (x+y) / convert(typeof(y), 2)
+        end
+        return c
+    end
+
+    function rastNormMean(x, minVal = 0, maxVal=99990)
+        #c = convert(eltype(x), 0.1)
+        #itr = convert(eltype(x), 0.1)
+        #minVal = convert(eltype(x), minVal)
+        #maxVal = convert(eltype(x), maxVal)
+        c = 0.1
+        itr = 0.1
+        #@info length(x)
+        for i in x
+            if maxVal >= i > minVal
+                c += i
+                itr += 1.0
+            end
+        end
+        f = Float16(c/itr)
+        #f = convert(eltype(x), c/itr)
+        return f
+    end
+    
+    function rastMean(x...; minVal = 0, maxVal=9999)
+        c = Float64(0)
+        itr = Float64(0)
+        minVal = convert(eltype(x), minVal)
+        maxVal = convert(eltype(x), maxVal)
+        #@info length(x)
+        for j in x
+            for i in j
+                if maxVal >= i > minVal
+                    c += i
+                    itr += 1.0
+                end
+            end
+        end
+        f = convert(eltype(x), c/itr)
+        return f
+    end
+
+    function removeNaN(x)
+        if isnan(x)
+            x = convert(eltype(x), 0)
+        end
+        return x
+    end
+
 
     function generateArea(inputVector, tile)
         ret = DataFrame(a = [], b = [], c = [])
@@ -1121,56 +1191,6 @@ module Sentinel
         end
         x[!, :nodata] = noDataVec
         x[!, :poly] = polyVec
-        return x
-    end
-
-    function scanRastMean(x, y)
-        c = max(x, y)
-        if x != 0 && y != 0
-            c = (x+y) / convert(typeof(y), 2)
-        end
-        return c
-    end
-
-    function rastNormMean(x, minVal = 0, maxVal=9999)
-        c = Float64(0)
-        itr = Float64(0)
-        minVal = convert(eltype(x), minVal)
-        maxVal = convert(eltype(x), maxVal)
-        #@info length(x)
-        for i in x
-            if maxVal >= i > minVal
-                c += i
-                itr += 1.0
-            end
-        end
-        
-        f = convert(eltype(x), c/itr)
-        return f
-    end
-    
-    function rastMean(x...; minVal = 0, maxVal=9999)
-        c = Float64(0)
-        itr = Float64(0)
-        minVal = convert(eltype(x), minVal)
-        maxVal = convert(eltype(x), maxVal)
-        #@info length(x)
-        for j in x
-            for i in j
-                if maxVal >= i > minVal
-                    c += i
-                    itr += 1.0
-                end
-            end
-        end
-        f = convert(eltype(x), c/itr)
-        return f
-    end
-
-    function removeNaN(x)
-        if isnan(x)
-            x = convert(eltype(x), 0)
-        end
         return x
     end
 end
