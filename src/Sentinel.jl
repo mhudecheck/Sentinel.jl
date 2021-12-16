@@ -980,7 +980,7 @@ module Sentinel
         return file
     end
 
-    function normalizeRasters(x, y; nSample = 1000; merge=true)
+    function normalizeRasters(x, y; nSample = 1000, merge=true)
         xSample = sample(x, nSample);
         ySample = sample(y, nSample);
         dist = KernelDensity.kde(xSample, npoints=4, boundary=(minimum(xSample), maximum(xSample)));
