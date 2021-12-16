@@ -441,7 +441,7 @@ module Sentinel
         end
     end
 
-    function applyScreens(files; GPU = false, normalize=false, target="") 
+    function applyScreens(files; GPU = false, normalize=false, target=""; merge=false) 
         for file in files
             if haskey(file, "CloudScreen")
                 for i in keys(file)
@@ -451,7 +451,7 @@ module Sentinel
                             tmpScreen = parent(file[i])
                             if normalize == true 
                                 targetScreen = parent(target[i])
-                                tmpScreen = normalizeRasters(tmpScreen, targetScreen)
+                                tmpScreen = normalizeRasters(tmpScreen, targetScreen; merge=merge)
                                 targetScreen = nothing
                             end
                             if size(file[i]) != size(file["CloudScreen"])
@@ -966,7 +966,7 @@ module Sentinel
         return y/z
     end
 
-    function mergeSAFE(files...; normalize=false)
+    function mergeSAFE(files...; normalize=false, merge=true)
         CUDA.allowscalar(true)
         file = copy(files[1])
         keyList = keys(file)
@@ -977,7 +977,7 @@ module Sentinel
                 for i in 2:length(files)
                     tmpA = parent(files[i][key])
                     tmpB = parent(file[key])
-                    push!(cArray, normalizeRasters(tmpB, tmpA))
+                    push!(cArray, normalizeRasters(tmpB, tmpA; merge=merge))
                     tmpA = nothing
                     tmpB = nothing
                 end
