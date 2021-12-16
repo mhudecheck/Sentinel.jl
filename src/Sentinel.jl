@@ -20,8 +20,9 @@ module Sentinel
     using LibGEOS
     using Adapt
     using KernelDensity
+    using Turing
 
-    export safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+    export normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
         textureArray = CuTextureArray(inputArray)
@@ -478,8 +479,8 @@ module Sentinel
     end
 
     function scanMaxMerge(x...) 
-        #y = convert(eltype(x[1]), x[1])
-        y = x[1]
+        y = convert(eltype(x[1]), x[1])
+        #y = x[1]
         for i in x
             if i > y
                 y = i
@@ -1006,5 +1007,108 @@ module Sentinel
         GC.gc()
         CUDA.reclaim()
         #return composite
+    end
+
+    function generateArea(inputVector, tile)
+        ret = DataFrame(a = [], b = [], c = [])
+        for (i, enum) in enumerate(inputVector)
+            nRet = DataFrame(a = [], b = [], c = [])
+            for j in i+1:length(inputVector)
+                altEnum = inputVector[j]
+                tempUnion = LibGEOS.union(enum, altEnum)
+                geomArea = LibGEOS.geomArea(tempUnion.ptr)
+                push!(nRet, (i, j, geomArea))
+            end
+            if nrow(nRet) > 0
+                sort(nRet, :c)
+                #push!(ret, nRet)
+                ret = vcat(ret, nRet)
+            end
+        end
+        sort(ret, :c)
+        return ret
+    end
+    
+    function compareAreas(x, tile)
+        returnDF = DataFrame(tile = [], a = [], b = [], c = [], id1 = [], id2 = [], cc1 = [], cc2 = [], d1 = [], d2 = [])
+        inputVec = x[x.MGRS_TILE .== tile, :poly]
+        a = generateArea(inputVec, tile);
+        a[!, :id1] .= ""
+        a[!, :id2] .= ""
+        a[!, :cc1] .= 0.0
+        a[!, :cc2] .= 0.0
+        a[!, :d1] .= ""
+        a[!, :d2] .= ""
+        for i in 1:nrow(a)
+            j = a[i, :]
+            i1 = j.a
+            i2 = j.b 
+            id1 = x[i1, :PRODUCT_ID]
+            id2 = x[i2, :PRODUCT_ID]
+            cc1 = x[i1, :CLOUD_COVER]
+            cc2 = x[i2, :CLOUD_COVER]
+            d1 = x[i1, :SENSING_TIME]
+            d2 = x[i2, :SENSING_TIME]
+            a[i, :id1] = id1[1:3]
+            a[i, :id2] = id2[1:3]
+            a[i, :cc1] = cc1
+            a[i, :cc2] = cc2
+            a[i, :d1] = d1
+            a[i, :d2] = d2
+        end
+        a[!, :tile] .= tile  
+        append!(returnDF, a)
+        return returnDF
+    end
+    
+    function extractNoData(x)
+        x[:, :nodata] .= 0
+        noDataVec = []
+        polyVec = []
+        for i in 1:nrow(x)
+            row = x[i, :]
+            url = row.BASE_URL
+            noData, poly = Sentinel.safeCoverageData(url; target="L2A");
+            push!(noDataVec, noData)
+            push!(polyVec, poly)
+        end
+        x[!, :nodata] = noDataVec
+        x[!, :poly] = polyVec
+        return x
+    end
+
+    function scanRastMean(x, y)
+        c = max(x, y)
+        if x != 0 && y != 0
+            c = (x+y) / convert(typeof(y), 2)
+        end
+        return c
+    end
+    
+    function rastMean(x, minVal = 0, maxVal=9999)
+        c = Float64(0)
+        itr = Float64(0)
+        minVal = convert(eltype(x), minVal)
+        maxVal = convert(eltype(x), maxVal)
+        for i in x
+            if maxVal >= i > minVal
+                c += i
+                itr += 1.0
+            end
+        end
+        f = convert(eltype(x), c/itr)
+        return f
+    end
+
+    function normalizeRasters(x, y; nSample = 1000)
+        xSample = sample(x, nSample);
+        ySample = sample(y, nSample);
+        dist = KernelDensity.kde(xSample, npoints=4, boundary=(minimum(xSample), maximum(xSample)));
+        a = rastMean(xSample, dist.x[1], dist.x[2]);
+        b = rastMean(ySample, dist.x[1], dist.x[2]);
+        throttle = b/a;
+        z = broadcast(*, x, throttle);
+        merge = broadcast(scanRastMean, z, y);
+        return merge, throttle
     end
 end

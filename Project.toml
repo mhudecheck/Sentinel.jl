@@ -4,7 +4,7 @@ keywords = ["Sentinel"]
 license = "MIT"
 desc = "Library for working with ESA Sentinel 2 products"
 authors = ["Michael Hudecheck"]
-version = "0.2.3"
+version = "0.4.0"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -27,6 +27,7 @@ LightXML = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
 Metadata = "4fb893c1-3164-4f58-823a-cb4c64eabb4f"
 NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [compat]
 Adapt = "^3.3.1"
@@ -41,10 +42,11 @@ Graphics = "^1.1.1"
 Images = "^0.24.1"
 Interpolations = "^0.13.4"
 JSON = "^0.21.2"
+KernelDensity = "^0.6.3"
 LibGEOS = "^0.6.8"
 LightXML = "^0.9.0"
 Metadata = "^0.3.0"
 NamedArrays = "^0.9.6"
 Printf = "^1.4.1"
-KernelDensity = "^0.6.3"
+Turing = "^0.19.0"
 julia = "^1.6.0"
