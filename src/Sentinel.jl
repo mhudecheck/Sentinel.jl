@@ -438,13 +438,16 @@ module Sentinel
         end
     end
 
-    function applyScreens(files; GPU = false) 
+    function applyScreens(files; GPU = false, normalize=false, target=0) 
         for file in files
             if haskey(file, "CloudScreen")
                 for i in keys(file)
                     if i[1] == 'B'
                         keyName = split(i, "-")
                         tmpScreen = parent(file[i])
+                        if normalze != false && target != 0
+                            tmpScreen = normalizeRasters(tmpScreen, parent(target[key]))
+                        end
                         if size(file[i]) != size(file["CloudScreen"])
                             tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = GPU);
                         end
@@ -955,15 +958,40 @@ module Sentinel
         return y/z
     end
 
-    function mergeSAFE(files...)
+    function mergeSAFE(files...; normalize=false)
         file = copy(files[1])
         keyList = keys(file)
         for key in keyList
             meta = metadata(file[key]);
-            file[key] = broadcast(Sentinel.scanMaxMerge, map((x) -> parent(x[key]), files)...);
+            if normalize == true
+                cArray = []
+                for i in 2:files
+                    append!(cArray, normalizeRasters(parent(file[key]), parent(files[i][key])))
+                end
+                file[key] = broadcast(rastMean, files...);
+                for i in cArray
+                    i = nothing
+                end
+            else
+                file[key] = broadcast(rastMean, map((x) -> parent(x[key]), files)...);
+            end
             file[key] = attach_metadata(file[key], meta); 
         end
         return file
+    end
+
+    function normalizeRasters(x, y; nSample = 1000; merge=true)
+        xSample = sample(x, nSample);
+        ySample = sample(y, nSample);
+        dist = KernelDensity.kde(xSample, npoints=4, boundary=(minimum(xSample), maximum(xSample)));
+        a = rastMean(xSample, dist.x[1], dist.x[2]);
+        b = rastMean(ySample, dist.x[1], dist.x[2]);
+        throttle = b/a;
+        retRaster = broadcast(*, x, throttle);
+        if merge == true
+            retRaster = broadcast(scanRastMean, retRaster, y);
+        end
+        return retRaster
     end
 
     function migrateSafe(composite, target="CPU")
@@ -1085,30 +1113,20 @@ module Sentinel
         return c
     end
     
-    function rastMean(x, minVal = 0, maxVal=9999)
+    function rastMean(x...; minVal = 0, maxVal=9999)
         c = Float64(0)
         itr = Float64(0)
-        minVal = convert(eltype(x), minVal)
-        maxVal = convert(eltype(x), maxVal)
+        minVal = convert(eltype(x[1]), minVal)
+        maxVal = convert(eltype(x[1]), maxVal)
         for i in x
             if maxVal >= i > minVal
                 c += i
                 itr += 1.0
             end
         end
-        f = convert(eltype(x), c/itr)
+        f = convert(eltype(x[1]), c/itr)
         return f
     end
-
-    function normalizeRasters(x, y; nSample = 1000)
-        xSample = sample(x, nSample);
-        ySample = sample(y, nSample);
-        dist = KernelDensity.kde(xSample, npoints=4, boundary=(minimum(xSample), maximum(xSample)));
-        a = rastMean(xSample, dist.x[1], dist.x[2]);
-        b = rastMean(ySample, dist.x[1], dist.x[2]);
-        throttle = b/a;
-        z = broadcast(*, x, throttle);
-        merge = broadcast(scanRastMean, z, y);
-        return merge, throttle
-    end
 end
+
+
