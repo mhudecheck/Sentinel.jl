@@ -536,7 +536,7 @@ module Sentinel
                 ArchGDAL.setproj!(raster, ref)
                 for k in 1:bandCount
                     rast = broadcast(trunc, parent(file[bandList[k]]))
-                    rast = broadcast(removeNaN, rast)
+                    #rast = broadcast(removeNaN, rast)
                     #rast = transpose(rast)
                     rast = Array{type}(rast)
                     ArchGDAL.write!(raster, rast, k)
