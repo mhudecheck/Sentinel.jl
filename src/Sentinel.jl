@@ -980,7 +980,7 @@ module Sentinel
         for key in keyList
             meta = metadata(file[key]);
             if normalize == true
-                @info key
+                #@info key
                 cArray = []
                 for i in 2:length(files)
                     tmpA = parent(files[i][key])
@@ -1014,7 +1014,7 @@ module Sentinel
             a = rastNormMean(xSample, dist.x[1], dist.x[2]);
             b = rastNormMean(ySample, dist.x[1], dist.x[2]);
             throttle = Float16(b/a);
-            @info throttle, a, b, minimum(xSample), maximum(xSample), minimum(ySample), maximum(ySample)
+            #@info throttle, a, b, minimum(xSample), maximum(xSample), minimum(ySample), maximum(ySample)
             retRaster = broadcast(*, x, throttle);
             if merge == true
                 #retRaster = broadcast(scanRastMean, retRaster, y);
