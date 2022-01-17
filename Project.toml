@@ -27,6 +27,7 @@ LightXML = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
 Metadata = "4fb893c1-3164-4f58-823a-cb4c64eabb4f"
 NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [compat]
