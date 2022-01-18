@@ -22,7 +22,7 @@ module Sentinel
     using KernelDensity
     using Turing
 
-    export removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+    export resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
     """
     resizeCuda(input::CuArray, width::Integer, height::Integer; returnGPU::Bool, interpolation::Bool, interpolationType::String)
@@ -63,14 +63,13 @@ module Sentinel
         end
     end
 
-    # Linear Kernel
     function linearKernel(output, input)
         tid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
         I = CartesianIndices(output)
         @inbounds if tid <= length(I)
             i,j = Tuple(I[tid])
-            u = Float16(i-1) / Float16(size(output, 1)-1)
-            v = Float16(j-1) / Float16(size(output, 2)-1)
+            u = Float64(i-1) / Float64(size(output, 1)-1)
+            v = Float64(j-1) / Float64(size(output, 2)-1)
             x = u
             y = v
             output[i,j] = input[x,y]
@@ -91,13 +90,13 @@ module Sentinel
     - `interpolation::Bool`: Specify whether the resized output array should be smoothed 
     - `smoothing::String`: If interpolation == true, you can select whether to apply a linear smoothing function (default) with "linear" or a nearest neighbor smoothing function if smoothing != "linear".
     """
-    
+
     function resizeRaster(raster::AbstractArray, targetWidth::Integer, targetHeight::Integer; gpu::Bool=false, interpolation = true, smoothing="linear")
         resizedImageArray = Array{eltype(raster)}(undef, targetWidth, targetHeight) # Output Array for Resized Image
 
         if isa(raster, CuArray) == false | gpu == false
             # Uses ImageTransformations.jl
-            imresize(raster, (targetWidth, targetHeight));
+            resizedImageArray = imresize(raster, (targetWidth, targetHeight));
         else
             # Output Image Size
             originalLength = height(raster)
