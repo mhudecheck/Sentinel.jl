@@ -24,14 +24,32 @@ module Sentinel
 
     export removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
    
-    function resizeCuda(inputArray, inputWidth, inputHeight; returnGPU = false, interpolation=true)
-        textureArray = CuTextureArray(inputArray)
+    """
+    resizeCuda(input::CuArray, width::Integer, height::Integer; returnGPU::Bool, interpolation::Bool, interpolationType::String)
+
+    Resizes CuArrays to specificed input widths and heights. CuArrays are converted to CuTextureArrays, which allows for linear and nearest neighbor interpolations. 
+    
+    # Arguments
+        - `input::CuArray`: Input CuArray to be resized
+        - `width::Integer`: Output array width
+        - `height::Integer`: Output array height
+        - `returnGPU::Bool`: Specify whether the function should return an Array (false) or CuArray (true)
+        - `interpolation::Bool`: Specify whether the resized output array should be smoothed 
+        - `smoothing::String`: If interpolation == true, you can select whether to apply a linear smoothing function (default) with "linear" or a nearest neighbor smoothing function if smoothing != "linear".
+    """
+    function resizeCuda(input::CuArray, width::Integer, height::Integer; returnGPU::Bool = false, interpolation::Bool = true, smoothing::String = "linear")
+        textureArray = CuTextureArray(input)
         if interpolation == true
-            texture = CuTexture(textureArray; normalized_coordinates=true, interpolation=CUDA.LinearInterpolation())
+            if smoothing != "linear"
+                textureType = CUDA.NearestNeighbour()
+            else 
+                textureType = CUDA.LinearInterpolation()
+            end 
+            texture = CuTexture(textureArray; normalized_coordinates=true, interpolation=textureType)
         else 
             texture = CuTexture(textureArray; normalized_coordinates=true)
         end
-        outputCUDAArray = CuArray{eltype(inputArray)}(undef, inputWidth, inputHeight)
+        outputCUDAArray = CuArray{eltype(inputArray)}(undef, width, height)
         k = @cuda launch=false linearKernel(outputCUDAArray, texture)
         config = launch_configuration(k.fun)
         threads = Base.min(length(outputCUDAArray), config.threads)
@@ -58,6 +76,71 @@ module Sentinel
             output[i,j] = input[x,y]
         end
         return
+    end
+       
+    """
+    resizeRaster(raster::AbstractArray, targetWidth::Integer, targetHeight::Integer; gpu::Bool)
+    Resizes input arrays. When gpu == false or when the input raster is not a CuArray, resizeRaster() acts as wrapper for ImageTransformations.imresize().
+    When gpu == true and the input raster is a CuArray, resizeRaster() acts as a memory-safe front end for resizeCuda(). 
+
+    # Arguments
+    - `raster::AbstractArray`: Input array
+    - `targetWidth::Integer`: Output array width
+    - `targetHeight::Integer`: Output array height
+    - `gpu::Bool`: Specifies whether raster should be resized with ImageTransformations.imresize() (false) or Sentinel.resizeCuda() true
+    - `interpolation::Bool`: Specify whether the resized output array should be smoothed 
+    - `smoothing::String`: If interpolation == true, you can select whether to apply a linear smoothing function (default) with "linear" or a nearest neighbor smoothing function if smoothing != "linear".
+    """
+    
+    function resizeRaster(raster::AbstractArray, targetWidth::Integer, targetHeight::Integer; gpu::Bool=false, interpolation = true, smoothing="linear")
+        resizedImageArray = Array{eltype(raster)}(undef, targetWidth, targetHeight) # Output Array for Resized Image
+
+        if isa(raster, CuArray) == false | gpu == false
+            # Uses ImageTransformations.jl
+            imresize(raster, (targetWidth, targetHeight));
+        else
+            # Output Image Size
+            originalLength = height(raster)
+            originalHeight = width(raster)
+            imgType = eltype(raster)
+
+            # Get Free vRam
+            dev = first(NVML.devices())
+            availMem = NVML.memory_info(dev).free
+            availMem = availMem * .9
+            
+            # Get Max Img Size that Fits in vRAM
+            maxLengthRam = floor(Int, sqrt(floor(Int, availMem / sizeof(imgType))))
+            
+            estUsage = originalHeight + targetHeight
+            if estUsage < maxLengthRam
+                numberIterations = 1
+            else
+                numberIterations = ceil(Int, estUsage / maxLengthRam)
+            end
+            
+            ### Resize Input 
+            inputDiv = (originalHeight + targetHeight) / maxLengthRam # Ratio for IDing Input and Output GPU Chunk Lengths
+            outputChunkLength = floor(Int, targetWidth / inputDiv)
+            outputChunkHeight = floor(Int, targetHeight / inputDiv)
+            inputChunkLength = ceil(Int, originalLength / inputDiv)
+            inputChunkHeight = ceil(Int, originalHeight / inputDiv)
+            
+            coordinatesOriginalImageArray = collect(TileIterator(axes(raster), (inputChunkLength, inputChunkHeight))) # Equals Input Length to GPU
+            coordinatesResizedImageArray = collect(TileIterator(axes(resizedImageArray), (outputChunkLength, outputChunkHeight))) # Equals Output Length from GPU
+            for i in 1:length(coordinatesOriginalImageArray)
+                @info i
+                chunkCoords = coordinatesOriginalImageArray[i]
+                chunkToGPU = raster[chunkCoords...]
+                resizedArrayCoords = coordinatesResizedImageArray[i]
+                inputWidth = (maximum(resizedArrayCoords[1]) - minimum(resizedArrayCoords[1])) + 1
+                inputHeight = (maximum(resizedArrayCoords[2]) - minimum(resizedArrayCoords[2])) + 1
+                outputChunk = resizeCuda(chunkToGPU, inputWidth, inputHeight; interpolation=interpolation, smoothing = smoothing)
+                resizedImageArray[resizedArrayCoords...] = outputChunk
+                outputChunk = nothing
+            end
+        end
+        return resizedImageArray
     end
 
     function pn(x) 
