@@ -90,7 +90,6 @@ module Sentinel
     - `interpolation::Bool`: Specify whether the resized output array should be smoothed 
     - `smoothing::String`: If interpolation == true, you can select whether to apply a linear smoothing function (default) with "linear" or a nearest neighbor smoothing function if smoothing != "linear".
     """
-
     function resizeRaster(raster::AbstractArray, targetWidth::Integer, targetHeight::Integer; gpu::Bool=false, interpolation = true, smoothing="linear")
         resizedImageArray = Array{eltype(raster)}(undef, targetWidth, targetHeight) # Output Array for Resized Image
 
