@@ -1,5 +1,4 @@
 
-
 module Sentinel
 using CUDA
 using ArchGDAL
@@ -218,7 +217,7 @@ function scanNorm(x, maxVal)
     return x
 end
 
-function loadSentinelb(tif; GPU=false, normalize=false, target="L2A")
+function loadSentinel(tif; GPU=false, normalize=false, target="L2A")
     tifArray = Dict()
     origString = tif * "/MTD_MSI$target.xml"
     safeMeta = ArchGDAL.read(origString)

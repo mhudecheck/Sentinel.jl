@@ -30,6 +30,7 @@ NamedArrays = "86f7a689-2022-50b4-a561-43c23ac3c673"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+TiledIteration = "06e1c1a7-607b-532d-9fad-de7d9aa2abac"
 
 [compat]
 Adapt = "^3.3.1"
@@ -51,4 +52,5 @@ Metadata = "^0.3.0"
 NamedArrays = "^0.9.6"
 Printf = "^1.4.1"
 Turing = "^0.19.0"
+TiledIteration = "^0.4.0"
 julia = "^1.6.0"
