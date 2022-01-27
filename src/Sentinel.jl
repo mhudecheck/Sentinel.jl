@@ -27,18 +27,20 @@ using HTTP
 using Statistics
 using NCDatasets
 
-export createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+export processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
 
     function createSentinelFiveTif(input, output; myId = 1, cacheDir=pwd() * "/.cache/", productName = "nitrogendioxide_tropospheric_column", qcVal = 50)
         # Create Cache
         mkpath(cacheDir)
-        j = string(MyId, "_temp.nc") # Sets ID for multithreaded use 
+        j = string(myId, "_temp.nc") # Sets ID for multithreaded use 
         jWd = string(cacheDir, j)
+        @info jWd
         try
             # Copy File to Temp Folder
-            cp(inputFile, jWd, force=true)
-            #iSize = filesize(inputFile)
-            #jSize = filesize(jWd)
+            cp(input, jWd, force=true)
+            iSize = filesize(input)
+            jSize = filesize(jWd)
+            println("$iSize, $jSize")
         
             # Build Filenames & ID Strings
             lonString = string("HDF5:\"", jWd, "\"://PRODUCT/longitude")
@@ -76,16 +78,17 @@ export createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRas
             ## Build VRTs
             # Longitude
             #print("Building VRTs for $i", "\n")
-            lonVrt = string(myid(), "_lon.vrt")
-            @time modifyVRT("./lonTemplate.vrt", lonVrt, lonString, xSize, ySize)
+            lonVrt = string(myId, "_lon.vrt")
+            @info pkgdir(Sentinel)
+            modifyVRT(pkgdir(Sentinel) * "/src/vrt/lonTemplate.vrt", lonVrt, lonString, xSize, ySize)
 
             # Latitude
-            latVrt = string(myid(), "_lat.vrt")
-            @time modifyVRT("./latTemplate.vrt", latVrt, latString, xSize, ySize)
+            latVrt = string(myId, "_lat.vrt")
+            modifyVRT(pkgdir(Sentinel) * "/src/vrt/latTemplate.vrt", latVrt, latString, xSize, ySize)
 
             # Data
-            dataVrt = string(myid(), "_data.vrt")
-            @time modifyVRT("./dataTemplate.vrt", dataVrt, dataString, xSize, ySize, lonVrt, latVrt)
+            dataVrt = string(myId, "_data.vrt")
+            modifyVRT(pkgdir(Sentinel) * "/src/vrt/dataTemplate.vrt", dataVrt, dataString, xSize, ySize, lonVrt, latVrt)
 
             ## Convert to GeoTIFF
             #print("Building TIF for $i", "\n")
@@ -97,10 +100,54 @@ export createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRas
             rm(jWd)
             jWd = nothing
         catch err
+            @info err
             #print("Error file $j, original file $i, $err", "\n")
             rm(jWd)
         end
     end
+
+    function processSentinelFiveTifs(date, inputDirectory, outputDirectory; naVal = 9000, throttleVal = 1)
+        cwd = pwd()
+        cd(inputDirectory)
+        tifList = glob("S5P_OFFL_L2__NO2____$date*")
+    
+        merge = `gdalbuildvrt -srcnodata 9.969209968386869e+36 raster_$date.vrt $tifList`
+        run(merge)
+    
+        # Create Results TIF
+        outputTif = outputDirectory * "/" * date * ".tif"
+        outputThrottledTif = outputDirectory * "/throttled_" * date * ".tif"
+        aggr = `gdal_translate -r average raster_$date.vrt outputTif`
+        run(aggr)
+    
+        # Clean Results and Save to Second Tif
+        cd(outputDirectory)
+        try
+            ArchGDAL.read("$date.tif") do dataset
+                band1 = ArchGDAL.getband(dataset,1)
+                raster = ArchGDAL.create(outputThrottledTif, driver=ArchGDAL.getdriver("GTiff"),  width=ArchGDAL.width(band1), height=ArchGDAL.height(band1), nbands=1, dtype=Float32)
+    
+                # Process Dataset
+                data = ArchGDAL.read(band1)
+                data[data.>= naVal] .= 0 # Clear NA Values
+                data[data.<=0] .= 0
+                data[data.>= throttleVal] .= 1 # Throttle Extraneous Results
+                ref = ArchGDAL.getproj(dataset)
+                geotransform = ArchGDAL.getgeotransform(dataset)
+                ArchGDAL.setgeotransform!(raster, geotransform)
+                ArchGDAL.setproj!(raster, ref)
+    
+                ## write the raster
+                ArchGDAL.write!(raster, data, 1)
+                ArchGDAL.destroy(raster)
+            end
+            cd(cwd)
+        catch err
+            print(err)
+            cd(cwd)
+        end
+    end
+
     """
     resizeCuda(input::CuArray, width::Integer, height::Integer; returnGPU::Bool, interpolation::Bool, interpolationType::String)
 
