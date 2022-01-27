@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VRTDataset rasterXSize="450" rasterYSize="4172">
+<VRTRasterBand dataType="Float32" band="1">
+  <Metadata>
+    <MDI key="PRODUCT_latitude_bounds">/PRODUCT/SUPPORT_DATA/GEOLOCATIONS/latitude_bounds</MDI>
+    <MDI key="PRODUCT_latitude_long_name">pixel center latitude</MDI>
+    <MDI key="PRODUCT_latitude_standard_name">latitude</MDI>
+    <MDI key="PRODUCT_latitude_units">degrees_north</MDI>
+    <MDI key="PRODUCT_latitude_valid_max">90 </MDI>
+    <MDI key="PRODUCT_latitude_valid_min">-90 </MDI>
+    <MDI key="PRODUCT_latitude__FillValue">9.96921e+36 </MDI>
+    <MDI key="PRODUCT_latitude__Netcdf4Dimid">3 </MDI>
+  </Metadata>
+  <NoDataValue>9.969209968386869e+36</NoDataValue>
+  <SimpleSource>
+    <SourceFilename relativeToVRT="1">HDF5:"S5P_OFFL_L2__NO2____20200101T023416_20200101T041546_11488_01_010302_20200102T190100.nc"://PRODUCT/latitude</SourceFilename>
+    <SourceBand>1</SourceBand>
+    <SourceProperties RasterXSize="450" RasterYSize="4172" DataType="Float32" />
+    <SrcRect xOff="0" yOff="0" xSize="450" ySize="4172"/>
+    <DstRect xOff="0" yOff="0" xSize="450" ySize="4172"/>
+  </SimpleSource>
+</VRTRasterBand>
+</VRTDataset>

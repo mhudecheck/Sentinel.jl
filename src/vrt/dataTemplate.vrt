@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VRTDataset rasterXSize="450" rasterYSize="4172">
+  <metadata domain="GEOLOCATION">
+    <mdi key="X_DATASET">lon.vrt</mdi>
+    <mdi key="X_BAND">1</mdi>
+    <mdi key="Y_DATASET">lat.vrt</mdi>
+    <mdi key="Y_BAND">1</mdi>
+    <mdi key="PIXEL_OFFSET">0</mdi>
+    <mdi key="LINE_OFFSET">0</mdi>
+    <mdi key="PIXEL_STEP">1</mdi>
+    <mdi key="LINE_STEP">1</mdi>
+  </metadata>
+  <VRTRasterBand dataType="Float32" band="1">
+   <NoDataValue>9.969209968386869e+36</NoDataValue>
+   <SimpleSource>
+     <SourceFilename relativeToVRT="1">HDF5:"S5P_OFFL_L2__NO2____20200101T023416_20200101T041546_11488_01_010302_20200102T190100.nc"://PRODUCT/qaNTC</SourceFilename>
+     <SourceBand>1</SourceBand>
+     <SourceProperties RasterXSize="450" RasterYSize="4172" DataType="Float32" />
+     <SrcRect xOff="0" yOff="0" xSize="450" ySize="4172"/>
+     <DstRect xOff="0" yOff="0" xSize="450" ySize="4172"/>
+   </SimpleSource>
+ </VRTRasterBand>
+</VRTDataset>
