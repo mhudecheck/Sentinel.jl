@@ -27,7 +27,58 @@ using HTTP
 using Statistics
 using NCDatasets
 
-export processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+
+    function buildR(i; sStart=1, sEnd = 8)
+        date = SubString.(i, sStart, sEnd)
+        rString = "$date:./$i"
+        return rString
+    end
+
+    function buildS(i; sStart=1, sEnd = 8)
+        date = SubString.(i, sStart, sEnd)
+        return date
+    end
+
+    function extractSentinelFive(targetDir, shapeFileDirectory, outputDirectory; globString = "20*", oRange = -1)
+        cwd = pwd()
+        cd(targetDir)
+        origList = glob(globString)
+        @info length(origList)
+
+        if oRange != -1
+            origList = origList[1:oRange]
+        end
+
+        rList = buildR.(origList);
+        sList = buildS.(origList);
+
+        l0Extract = `exactextract -r $rList -p $shapeFileDirectory/gadm36_0.shp -s mean"("$sList")" -o $outputDirectory/l0_means.csv -f NAME_0 --progress`
+        l1Extract = `exactextract -r $rList -p $shapeFileDirectory/gadm36_1.shp -s mean"("$sList")" -o $outputDirectory/l1_means.csv -f NAME_1 --progress`
+        l2Extract = `exactextract -r $rList -p $shapeFileDirectory/gadm36_2.shp -s mean"("$sList")" -o $outputDirectory/l2_means.csv -f NAME_2 --progress`
+        l3Extract = `exactextract -r $rList -p $shapeFileDirectory/gadm36_3.shp -s mean"("$sList")" -o $outputDirectory/l3_means.csv -f NAME_3 --progress`
+        @info 1
+        try 
+            run(l0Extract); 
+        catch
+        end
+        @info 2
+        try 
+            run(l1Extract); 
+        catch
+        end       
+        @info 3
+        try 
+            run(l2Extract); 
+        catch
+        end        
+        @info 4
+        try 
+            run(l3Extract); 
+        catch
+        end        
+        cd(cwd)
+    end
 
     function createSentinelFiveTif(input, output; myId = 1, cacheDir=pwd() * "/.cache/", productName = "nitrogendioxide_tropospheric_column", qcVal = 50)
         # Create Cache
@@ -107,31 +158,34 @@ export processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveLi
     end
 
     function processSentinelFiveTifs(date, inputDirectory, outputDirectory; naVal = 9000, throttleVal = 1)
+        @info 1
         cwd = pwd()
         cd(inputDirectory)
         tifList = glob("S5P_OFFL_L2__NO2____$date*")
     
         merge = `gdalbuildvrt -srcnodata 9.969209968386869e+36 raster_$date.vrt $tifList`
         run(merge)
-    
+        @info 2
+
         # Create Results TIF
         outputTif = outputDirectory * "/" * date * ".tif"
         outputThrottledTif = outputDirectory * "/throttled_" * date * ".tif"
-        aggr = `gdal_translate -r average raster_$date.vrt outputTif`
+        aggr = `gdal_translate -r average raster_$date.vrt $outputTif`
         run(aggr)
-    
+        @info 3
         # Clean Results and Save to Second Tif
         cd(outputDirectory)
         try
+            @info pwd(), "$date.tif"
             ArchGDAL.read("$date.tif") do dataset
                 band1 = ArchGDAL.getband(dataset,1)
                 raster = ArchGDAL.create(outputThrottledTif, driver=ArchGDAL.getdriver("GTiff"),  width=ArchGDAL.width(band1), height=ArchGDAL.height(band1), nbands=1, dtype=Float32)
     
                 # Process Dataset
                 data = ArchGDAL.read(band1)
-                data[data.>= naVal] .= 0 # Clear NA Values
-                data[data.<=0] .= 0
-                data[data.>= throttleVal] .= 1 # Throttle Extraneous Results
+                data[data.>= naVal] .= 0.0 # Clear NA Values
+                data[data.<=0.0] .= 0.0
+                data[data.>= throttleVal] .= 1.0 # Throttle Extraneous Results
                 ref = ArchGDAL.getproj(dataset)
                 geotransform = ArchGDAL.getgeotransform(dataset)
                 ArchGDAL.setgeotransform!(raster, geotransform)
@@ -143,7 +197,7 @@ export processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveLi
             end
             cd(cwd)
         catch err
-            print(err)
+            @error err
             cd(cwd)
         end
     end
