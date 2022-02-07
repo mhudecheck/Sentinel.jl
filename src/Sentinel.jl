@@ -157,11 +157,11 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
         end
     end
 
-    function processSentinelFiveTifs(date, inputDirectory, outputDirectory; naVal = 9000, throttleVal = 1)
+    function processSentinelFiveTifs(date, inputDirectory, outputDirectory; naVal = 9000, throttleVal = 1, searchString = "S5P_*_L2_*")
         @info 1
         cwd = pwd()
         cd(inputDirectory)
-        tifList = glob("S5P_OFFL_L2__NO2____$date*")
+        tifList = glob(searchString * "$date*")
     
         merge = `gdalbuildvrt -srcnodata 9.969209968386869e+36 raster_$date.vrt $tifList`
         run(merge)
