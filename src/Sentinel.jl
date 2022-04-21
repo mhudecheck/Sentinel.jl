@@ -158,11 +158,9 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
     end
 
     function processSentinelFiveTifs(date, inputDirectory, outputDirectory; naVal = 9000, throttleVal = 1, searchString = "S5P_*_L2_*")
-        @info 1
         cwd = pwd()
         cd(inputDirectory)
         tifList = glob(searchString * "$date*")
-    
         merge = `gdalbuildvrt -srcnodata 9.969209968386869e+36 raster_$date.vrt $tifList`
         run(merge)
         @info 2
@@ -184,8 +182,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 # Process Dataset
                 data = ArchGDAL.read(band1)
                 data[data.>= naVal] .= 0.0 # Clear NA Values
-                data[data.<=0.0] .= 0.0
-                data[data.>= throttleVal] .= 1.0 # Throttle Extraneous Results
+                data[data.<=0.0] .= 0.0 # Clean Negative Values
+                data[data.>= throttleVal] .= throttleVal # Throttle Extraneous Results
                 ref = ArchGDAL.getproj(dataset)
                 geotransform = ArchGDAL.getgeotransform(dataset)
                 ArchGDAL.setgeotransform!(raster, geotransform)
