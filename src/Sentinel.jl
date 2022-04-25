@@ -266,7 +266,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
     - `interpolation::Bool`: Specify whether the resized output array should be smoothed 
     - `smoothing::String`: If interpolation == true, you can select whether to apply a linear smoothing function (default) with "linear" or a nearest neighbor smoothing function if smoothing != "linear".
     """
-    function resizeRaster(raster::AbstractArray, targetWidth::Integer, targetHeight::Integer; gpu::Bool=false, interpolation = true, smoothing="linear")
+    function resizeRaster(raster::AbstractArray, targetWidth::Integer, targetHeight::Integer; gpu::Bool=false, device::Int = 0, interpolation = true, smoothing="linear")
         resizedImageArray = Array{eltype(raster)}(undef, targetWidth, targetHeight) # Output Array for Resized Image
 
         if isa(raster, CuArray) == false | gpu == false
@@ -283,7 +283,12 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             imgType = eltype(raster)
 
             # Get Free vRam
-            dev = first(NVML.devices())
+            if dev == 0
+                dev = first(NVML.devices())
+            else 
+                dev = device!(device)
+            end
+            
             availMem = NVML.memory_info(dev).free
             availMem = availMem * .9
             
