@@ -283,7 +283,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             imgType = eltype(raster)
 
             # Get Free vRam
-            if dev == 0
+            if device == 0
                 dev = first(NVML.devices())
             else 
                 dev = device!(device)
