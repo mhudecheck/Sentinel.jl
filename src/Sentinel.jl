@@ -286,9 +286,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             if device == 0
                 dev = first(NVML.devices())
             else 
-                dev = device!(device)
+                dev = NVML.Device(device)
             end
-            
             availMem = NVML.memory_info(dev).free
             availMem = availMem * .9
             
