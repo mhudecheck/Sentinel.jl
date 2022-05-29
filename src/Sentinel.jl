@@ -666,14 +666,14 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
         for i in 1:length(files)
             fileA = files[i]
             # Check Geometries
-            if type != "L2"
+            #if type != "L2"
                 aGeom = fileA["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileA["B2-10m"].file["filedata"])]
                 aGeom = String(SubString(aGeom, 11, length(aGeom)))
                 aGeom_Ptr = LibGEOS._readgeom(aGeom)
-            else
+            #else
                 #aGeom = String(SubString(fileA["B2-10m"].filedata[17], 11, length(fileA["B2-10m"].filedata[17])))
-                aGeom_Ptr = LibGEOS._readgeom(aGeom)
-            end
+                #aGeom_Ptr = LibGEOS._readgeom(aGeom)
+            #end
             if i != length(files)
                 for j in i+1:length(files) 
                     fileB = files[j]
