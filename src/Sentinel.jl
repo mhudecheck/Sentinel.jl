@@ -667,20 +667,23 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             fileA = files[i]
             # Check Geometries
             if type != "L2"
-                aGeom = String(SubString(fileA["B2-10m"].filedata[10], 11, length(fileA["B2-10m"].filedata[10])))
+                aGeom = fileA["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileA["B2-10m"].file["filedata"])]
+                aGeom = String(SubString(aGeom, 11, length(aGeom)))
                 aGeom_Ptr = LibGEOS._readgeom(aGeom)
             else
-                aGeom = String(SubString(fileA["B2-10m"].filedata[17], 11, length(fileA["B2-10m"].filedata[17])))
+                #aGeom = String(SubString(fileA["B2-10m"].filedata[17], 11, length(fileA["B2-10m"].filedata[17])))
                 aGeom_Ptr = LibGEOS._readgeom(aGeom)
             end
             if i != length(files)
                 for j in i+1:length(files) 
                     fileB = files[j]
-                    if type != "L2"
-                        bGeom = String(SubString(fileB["B2-10m"].filedata[10], 11, length(fileB["B2-10m"].filedata[10])))
-                    else
-                        bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
-                    end
+                    #if type != "L2"
+                    #    bGeom = String(SubString(fileB["B2-10m"].filedata[10], 11, length(fileB["B2-10m"].filedata[10])))
+                    #else
+                    #    bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
+                    #end
+                    bGeom = fileB["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileB["B2-10m"].file["filedata"])]
+                    bGeom = String(SubString(bGeom, 11, length(bGeom)))
                     bGeom_Ptr = LibGEOS._readgeom(bGeom)
                     compareGeoms = LibGEOS.geomArea(bGeom_Ptr) / LibGEOS.geomArea(aGeom_Ptr)
                     if compareGeoms > .8 && compareGeoms < 1.2
