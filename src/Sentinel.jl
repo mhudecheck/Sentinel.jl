@@ -795,8 +795,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                     end
                 end
             end
-            geoTransform = file["B2-10m"].geotransform
-            ref = file["B2-10m"].ref
+            geoTransform = file["B2-10m"].file["geotransform"]
+            ref = file["B2-10m"].file["ref"]
             sourceFile = transpose(parent(file["B2-10m"]))
             sourceFile = parent(file["B2-10m"])
 
