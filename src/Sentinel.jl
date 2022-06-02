@@ -522,7 +522,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
 
     # Create Screen (CUDA Only)
 
-    function sentinelCloudScreen(targetFile, screenFile; type="L2", b1Screen = 750, b2Screen = 1500, b4Screen = 1500, b10Screen = 1500, cloudMaskScreen = 80, GPU=true, GPU_All = false)
+    function sentinelCloudScreen(targetFile, screenFile; type="L2", b1Screen = 750, b2Screen = 1500, b4Screen = 1500, b10Screen = 1500, cloudMaskScreen = 80, GPU=true, GPU_All = false, cirrus = true)
         #println("Starting Cloud Screen")
         # Users can pass either a string to the SAFE file location or preloaded Abstract Arrays
         if typeof(targetFile) == String
@@ -565,12 +565,16 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
 
                 if type == "L2"
                     # Apply Sen2Cor Cloud Mask Screen
-                    cvec = findall(c2 .> cloudMaskScreen)
-                    t1a[cvec] .= 1
+                    if cloudMaskScreen != 9999
+                        cvec = findall(c2 .> cloudMaskScreen)
+                        t1a[cvec] .= 1
+                    end
 
                     # Apply Cirrus Cloud Screen
-                    t1a = .!t1a
-                    t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
+                    if cirrus == true
+                        t1a = .!t1a
+                        t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
+                    end
                     
                     # Process Cloud Screen - Cloud Masks are always at 10m
                     GPU == true ? cloudScreen = resizeCuda(CuArray(Array{Float16}(t1a)), width(r1), height(r1); interpolation=false) : cloudScreen = Images.imresize(t1a, width(r1), height(r1));
@@ -610,14 +614,21 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
 
                 if type == "L2"
                     # Apply Sen2Cor Cloud Mask Screen
-                    t1a = broadcast(cudaScan, c2, t1a, cloudMaskScreen)
+                    if cloudMaskScreen != 9999
+                        t1a = broadcast(cudaScan, c2, t1a, cloudMaskScreen)
+                    end
 
                     # Apply Cirrus Cloud Screen
-                    t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
+                    if cirrus == true
+                        t1a = broadcast(cudaCirrusScan, s2, t1a, 1, 8)
+                    end
 
                     # Process Cloud Screen - Cloud Masks are always at 10m
                     cloudScreen = resizeCuda(CuArray{Float16}(t1a), width(r1), height(r1); returnGPU = true);
-                    cloudScreen = broadcast(cudaCirrusScan, cloudScreen, cloudScreen, 1, 1)
+
+                    if cirrus == true
+                        cloudScreen = broadcast(cudaCirrusScan, cloudScreen, cloudScreen, 1, 1)
+                    end
                 else
                     # Apply B10 Screen
                     nScreen = n2 - n1
@@ -662,7 +673,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
         return screenOne, screenTwo 
     end
 
-    function generateScreens(files; type="L2", b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, b10Screen = 1500, cloudMaskScreen = 20, GPU=false)
+    function generateScreens(files; type="L2", b1Screen = 1000, b2Screen = 1000, b4Screen = 1000, b10Screen = 1500, cloudMaskScreen = 20, GPU=false, cirrus = true)
         for i in 1:length(files)
             fileA = files[i]
             # Check Geometries
@@ -687,7 +698,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                     bGeom_Ptr = LibGEOS._readgeom(bGeom)
                     compareGeoms = LibGEOS.geomArea(bGeom_Ptr) / LibGEOS.geomArea(aGeom_Ptr)
                     if compareGeoms > .8 && compareGeoms < 1.2
-                        targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; type = type, b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, b10Screen = b10Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU)
+                        targetScreen, screenScreen = sentinelCloudScreen(fileA, fileB; type = type, b1Screen = b1Screen, b2Screen = b2Screen, b4Screen = b4Screen, b10Screen = b10Screen, cloudMaskScreen = cloudMaskScreen, GPU=GPU, GPU_All = GPU, cirrus = cirrus)
                         #if type != "L1C"
                         haskey(fileA, "CloudScreen") == true ? fileA["CloudScreen"] = broadcast(cudaBitScan, fileA["CloudScreen"], screenScreen) : fileA["CloudScreen"] = screenScreen
                         haskey(fileB, "CloudScreen") == true ? fileB["CloudScreen"] = broadcast(cudaBitScan, fileB["CloudScreen"], targetScreen) : fileB["CloudScreen"] = targetScreen
