@@ -395,7 +395,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
         return x
     end
 
-    function loadSentinel(tif; GPU=false, normalize=false, target="L2A")
+    #=function loadSentinel(tif; GPU=false, normalize=false, target="L2A") 
         tifArray = Dict()
         origString = tif * "/MTD_MSI$target.xml"
         safeMeta = ArchGDAL.read(origString)
@@ -440,6 +440,48 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             end
         end
         return tifArray;
+    end=#
+
+    function loadSentinel(tif; GPU=false, normalize=false, normMaxScale = 1, target="L2A")
+        tifArray = Dict()
+        origString = tif * "/MTD_MSI$target.xml"
+        safeMeta = ArchGDAL.read(origString)
+        safeBasicMetaData = ArchGDAL.metadata(safeMeta)
+        fileNames = ArchGDAL.metadata(safeMeta; domain="SUBDATASETS")
+        fileList = split.(fileNames[occursin.("NAME", fileNames)], "=")
+        cnt = 1
+        for i in fileList
+            fileBand = i[2]
+            resolution = split(fileBand, ":")[3]
+            if resolution != "TCI"
+                ArchGDAL.read(fileBand) do dataset
+                    number_rasters = (ArchGDAL.nraster(dataset))
+                    ref = ArchGDAL.getproj(dataset)
+                    geotransform = ArchGDAL.getgeotransform(dataset)
+                    for bandCounter in 1:number_rasters
+                        bandInfo = ArchGDAL.getband(dataset, bandCounter)
+                        metaDataItem = ArchGDAL.metadataitem(bandInfo, "BANDNAME", domain="")
+                        GPU == true ? band = CuArray{Float16}(ArchGDAL.read(bandInfo)) : band = Array{Int32}(ArchGDAL.read(bandInfo))
+                        
+                        # Assumes that minimum band value is always == or ~= 0.0
+                        if normalize == true && metaDataItem[1] == 'B'
+                            maxPixel = CUDA.findmax(band)
+                            band = broadcast(scanNorm, band, maxPixel[1], normMaxScale)
+                        end
+                        bandMetaData = Dict("band_data" => ArchGDAL.metadata(bandInfo), 
+                                            "location" =>  ArchGDAL.metadata(bandInfo; domain="LocationInfo"), 
+                                            "image_structure" => ArchGDAL.metadata(bandInfo; domain="IMAGE_STRUCTURE"#, 
+                                            ))  
+                        sentRaster = Dict("$metaDataItem-$resolution" => band)
+                        tifArray = merge!(tifArray, sentRaster)
+                        tifArray["$metaDataItem-$resolution"] = attach_metadata(tifArray["$metaDataItem-$resolution"], Dict("metadata" => bandMetaData, "filedata" => safeBasicMetaData, "ref" => ref, "geotransform" => geotransform))
+                        cnt = cnt + 1
+                        band = nothing
+                    end
+                end
+            end
+        end
+        return tifArray
     end
 
     # Scan Code for CUDA Screens
@@ -685,7 +727,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             fileA = files[i]
             # Check Geometries
             #if type != "L2"
-                aGeom = fileA["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileA["B2-10m"].file["filedata"])]
+                #aGeom = fileA["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileA["B2-10m"].file["filedata"])]
+                aGeom = fileA["B2-10m"].filedata[findfirst(contains("FOOTPRINT"), fileA["B2-10m"].filedata)]
                 aGeom = String(SubString(aGeom, 11, length(aGeom)))
                 aGeom_Ptr = LibGEOS._readgeom(aGeom)
             #else
@@ -700,7 +743,9 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                     #else
                     #    bGeom = String(SubString(fileB["B2-10m"].filedata[17], 11, length(fileB["B2-10m"].filedata[17])))
                     #end
-                    bGeom = fileB["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileB["B2-10m"].file["filedata"])]
+                    bGeom = fileB["B2-10m"].filedata[findfirst(contains("FOOTPRINT"), fileB["B2-10m"].filedata)]
+
+                    #bGeom = fileB["B2-10m"].file["filedata"][findfirst(contains("FOOTPRINT"), fileB["B2-10m"].file["filedata"])]
                     bGeom = String(SubString(bGeom, 11, length(bGeom)))
                     bGeom_Ptr = LibGEOS._readgeom(bGeom)
                     compareGeoms = LibGEOS.geomArea(bGeom_Ptr) / LibGEOS.geomArea(aGeom_Ptr)
@@ -811,7 +856,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             name = names[i]
             bandCount = 0
             bandList = []
-
+    
             for j in keys(file)
                 if j != "CloudScreen"
                     keyName = split(j, "-")
@@ -827,7 +872,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             ref = file["B2-10m"].ref
             sourceFile = transpose(parent(file["B2-10m"]))
             sourceFile = parent(file["B2-10m"])
-
+    
             bandWidth = width(sourceFile)
             bandHeight = height(sourceFile)
             @show "Writing tif for $name"
@@ -835,14 +880,16 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 ArchGDAL.setgeotransform!(raster, geoTransform)
                 ArchGDAL.setproj!(raster, ref)
                 for k in 1:bandCount
-                    rast = broadcast(trunc, parent(file[bandList[k]]))
-                    #rast = broadcast(removeNaN, rast)
-                    #rast = transpose(rast)
-                    rast = Array{type}(rast)
-                    ArchGDAL.write!(raster, rast, k)
-                    rast = nothing
-                    ArchGDAL.getband(raster, k) do band
-                        ArchGDAL.setcategorynames!(band, [bandList[k]])                    
+                    if file[bandList[k]] != nothing
+                        rast = broadcast(trunc, parent(file[bandList[k]]))
+                        #rast = broadcast(removeNaN, rast)
+                        #rast = transpose(rast)
+                        rast = Array{type}(rast)
+                        ArchGDAL.write!(raster, rast, k)
+                        rast = nothing
+                        ArchGDAL.getband(raster, k) do band
+                            ArchGDAL.setcategorynames!(band, [bandList[k]])                    
+                        end
                     end
                 end
             end
