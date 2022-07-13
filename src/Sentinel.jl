@@ -459,7 +459,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
 
     function flushSAFE(files; GPU = false) 
         for file in files
-            if haskey(file, "CloudScreen")
+            #if haskey(file, "CloudScreen")
                 for i in keys(file)
                     if i != "CloudScreen"
                         keyName = split(i, "-")
@@ -468,7 +468,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                         end
                     end
                 end
-            end
+            #end
             if GPU == true
                 GC.gc()
                 CUDA.reclaim()
@@ -544,6 +544,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
             #n2 = parent(imageBands2["B9-60m"])
             bl1 = parent(imageBands1["B2-10m"])
             bl2 = parent(imageBands2["B2-10m"])
+            g1 = parent(imageBands1["B3-10m"])
+            g2 = parent(imageBands2["B3-10m"])
             r1 = parent(imageBands1["B4-10m"])
             r2 = parent(imageBands2["B4-10m"])
 
@@ -602,7 +604,7 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 cloudScreen[rVec] .= 0
                 return cloudScreen
             else 
-                #println("GPU")
+                println("GPU")
 
                 # Apply B1 Time Screen
                 t1 = b2 - b1
@@ -641,8 +643,11 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 cloudScreen = broadcast(cudaScan, bScreen, cloudScreen, b2Screen)
 
                 # Apply B4 Time Screen
-                rScreen = r2 - r1
+                #rScreen = r2 - r1
+                rScreen = (r2 + g2) - (r1 + g1)
                 cloudScreen = broadcast(cudaScan, rScreen, cloudScreen, b4Screen)
+
+
                 t1 = nothing
                 t1a = nothing
                 bScreen = nothing
@@ -654,6 +659,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 bl2 = nothing
                 r1 = nothing
                 r2 = nothing
+                g1 = nothing
+                g2 = nothing
                 if type != "L2"
                     n1 = nothing
                     n2 = nothing
@@ -745,19 +752,28 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                                 targetScreen = nothing
                             end
                             if size(file[i]) != size(file["CloudScreen"])
-                                tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = GPU);
+                                #@info "Starting cloud screen resize"
+                                @time tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = GPU);
+                                #@info "Ending cloud screen resize"
+
                             end
                             bandName = keyName[1] * "-Screened"
-                            file[bandName] = tmpScreen .* file["CloudScreen"]
+                            #@info "Starting bitscan to apply cloud screen"
+
+                            @time file[bandName] = parent(tmpScreen) .* parent(file["CloudScreen"])
+                            #@info "Completed bitscan to apply cloud screen"
+
                             tmpScreen = nothing
-                            if GPU == true
-                                GC.gc()
-                                CUDA.reclaim()
-                            end
+                            
                         end
                     end
                 end
             end
+        end
+        if GPU == true
+            #@info "Clearing GPU"
+            GC.gc()
+            CUDA.reclaim()
         end
         return
     end
@@ -800,14 +816,15 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 if j != "CloudScreen"
                     keyName = split(j, "-")
                     #@show j, keyName = split(j, "-")
-                    if keyName[2] == "Screened"
+                    #if keyName[2] == "Screened"
                         append!(bandList, [j])
                         bandCount = bandCount + 1
-                    end
+                    #end
                 end
             end
-            geoTransform = file["B2-10m"].file["geotransform"]
-            ref = file["B2-10m"].file["ref"]
+            #geoTransform = file["B2-10m"].file["geotransform"]
+            geoTransform = file["B2-10m"].geotransform
+            ref = file["B2-10m"].ref
             sourceFile = transpose(parent(file["B2-10m"]))
             sourceFile = parent(file["B2-10m"])
 
