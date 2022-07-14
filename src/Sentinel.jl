@@ -506,7 +506,10 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                     if i != "CloudScreen"
                         keyName = split(i, "-")
                         if keyName[2] != "Screened" && keyName[2] != "10m"
+                            meta = metadata(file[i])
                             file[i] = nothing
+                            file[i] = attach_metadata(file[i], meta)
+                            #file[i] = nothing
                         end
                     end
                 end
@@ -776,6 +779,17 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 width = nothing
             end
         end
+        aGeom = nothing
+        aGeom_Ptr = nothing
+        bGeom = nothing
+        bGeom_Ptr = nothing
+        compareGeoms = nothing
+        fileA = nothing
+        fileB = nothing
+        targetScreen = nothing
+        screenScreen = nothing
+        arrayType = nothing
+        width = nothing
         if GPU == true
             GC.gc()
             CUDA.reclaim()
@@ -792,22 +806,21 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                             tmpScreen = parent(file[i])
                             if normalize == true 
                                 targetScreen = parent(target[i])
-                                @info i
                                 tmpScreen = normalizeRasters(tmpScreen, targetScreen; merge=merge)
                                 targetScreen = nothing
                             end
                             if size(file[i]) != size(file["CloudScreen"])
                                 #@info "Starting cloud screen resize"
-                                @time tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = GPU);
+                                tmpScreen = resizeCuda(tmpScreen, width(file["CloudScreen"]), height(file["CloudScreen"]); returnGPU = GPU);
                                 #@info "Ending cloud screen resize"
 
                             end
                             bandName = keyName[1] * "-Screened"
                             #@info "Starting bitscan to apply cloud screen"
 
-                            @time file[bandName] = parent(tmpScreen) .* parent(file["CloudScreen"])
+                            file[bandName] = tmpScreen .* parent(file["CloudScreen"])
                             #@info "Completed bitscan to apply cloud screen"
-
+                            
                             tmpScreen = nothing
                             
                         end
@@ -815,9 +828,13 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                 end
             end
         end
+        keyName = nothing
+        tmpScreen = nothing
+        targetScreen = nothing
+        bandName = nothing
         if GPU == true
             #@info "Clearing GPU"
-            GC.gc()
+            GC.gc(true)
             CUDA.reclaim()
         end
         return
@@ -888,7 +905,8 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
                         ArchGDAL.write!(raster, rast, k)
                         rast = nothing
                         ArchGDAL.getband(raster, k) do band
-                            ArchGDAL.setcategorynames!(band, [bandList[k]])                    
+                            ArchGDAL.setcategorynames!(band, [bandList[k]])     
+                            ArchGDAL.setname!(band, bandList[k])
                         end
                     end
                 end
