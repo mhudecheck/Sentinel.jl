@@ -27,7 +27,7 @@ using HTTP
 using Statistics
 using NCDatasets
 
-export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
+export setBandName, extractSentinelFive, saveScreenedRasters_unsafe, buildR, buildS, processSentinelFiveTifs, createSentinelFiveTif, modifyVRT, sentinelFiveList, resizeCuda, resizeRaster, removeNaN, rastNormMean, normalizeRasters, scanRastMean, rastMean, generateArea, compareAreas, extractNoData, safeCoverage, mergeSAFE, migrateSafe, resizeCuda, flushSAFE, linearKernel, loadSentinel, scanInvert, cudaScan, cudaRevScan, cudaCirrusScan, sentinelCloudScreen, generateScreens, applyScreens, saveScreenedRasters, cloudInit, safeList, filterList, loadSentinel, loadRaster, extractSAFEGeometries, generateSAFEPath, sortSAFE, qc, generateCloudless
 
     function buildR(i; sStart=1, sEnd = 8)
         date = SubString.(i, sStart, sEnd)
@@ -38,6 +38,92 @@ export extractSentinelFive, buildR, buildS, processSentinelFiveTifs, createSenti
     function buildS(i; sStart=1, sEnd = 8)
         date = SubString.(i, sStart, sEnd)
         return date
+    end
+
+    function setBandName(id) 
+        i = split(id, "-")
+        k = nothing
+        if i[1,1] != "CloudScreen"
+            if i[2,1] == "Screened"
+                if i[1,1] != "B8A"
+                    k = parse(Int, filter(isdigit, i[1,1]))
+                else 
+                    k = 13
+                end
+                @info k
+            end
+        else
+            k = 14
+        end
+        return k, id
+    end
+    
+    function saveScreenedRasters_unsafe(x...; names=[], type=UInt16)
+        for i in 1:length(x)
+            file = x[i]
+            name = names[i]
+            bandCount = 0
+            bandList = []
+    
+            for j in keys(file)
+                if j != "CloudScreen"
+                    keyName = split(j, "-")
+                    #@show j, keyName = split(j, "-")
+                    if keyName[2] == "Screened"
+                        append!(bandList, [j])
+                        bandCount = bandCount + 1
+                    end
+                else 
+                    bandCount = bandCount + 1
+                end
+            end
+            #geoTransform = file["B2-10m"].file["geotransform"]
+            geoTransform = file["B2-10m"].geotransform
+            ref = file["B2-10m"].ref
+            #sourceFile = transpose(parent(file["B2-10m"]))
+            sourceFile = parent(file["B2-10m"])
+    
+            bandWidth = width(sourceFile)
+            bandHeight = height(sourceFile)
+            @show "Writing tif for $name"
+            ArchGDAL.create(name; driver=ArchGDAL.getdriver("GTiff"), width=bandWidth, height=bandHeight, nbands=bandCount, dtype=type, options = ["BIGTIFF=YES"]) do raster
+                ArchGDAL.setgeotransform!(raster, geoTransform)
+                ArchGDAL.setproj!(raster, ref)
+                for j in keys(file)
+                    k, id = setBandName(j)
+                    @info k, id
+                    if k != nothing
+                        if file[j] != nothing
+                            if parent(file[j]) != nothing
+                                rast = broadcast(trunc, parent(file[j]))
+                                #rast = broadcast(removeNaN, rast)
+                                #rast = transpose(rast)
+                                rast = Array{type}(rast)
+                                ArchGDAL.write!(raster, rast, k)
+                                rast = nothing
+                                ArchGDAL.getband(raster, k) do band
+                                    ArchGDAL.setcategorynames!(band, [id])     
+                                    #ArchGDAL.setname!(band, bandList[k])
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            ref = nothing
+            sourceFile = nothing
+            bandWidth = nothing
+            bandHeight = nothing
+            geoTransform = nothing
+            CUDA.reclaim()
+            GC.gc()
+        end
+        ref = nothing
+        sourceFile = nothing
+        bandWidth = nothing
+        bandHeight = nothing
+        geoTransform = nothing
+        CUDA.reclaim()
     end
 
     function extractSentinelFive(targetDir, shapeFileDirectory, outputDirectory; globString = "20*", oRange = -1)
