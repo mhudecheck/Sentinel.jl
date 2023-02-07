@@ -1230,8 +1230,8 @@ export setBandName, extractSentinelFive, saveScreenedRasters_unsafe, buildR, bui
             firstBand = ArchGDAL.getband(dataset, 1)
             width=ArchGDAL.width(firstBand)
             height=ArchGDAL.height(firstBand)
-            finalDataset = Array{UInt16}(undef, width, height, number_rasters)
-            finalDataset[:, :, 1] = Array{UInt16}(ArchGDAL.read(firstBand))
+            GPU == true ? finalDataset = CuArray{Float16}(undef, width, height, number_rasters) : finalDataset = Array{UInt16}(undef, width, height, number_rasters)
+            GPU == true ? finalDataset[:, :, 1] = CuArray{Float16}(ArchGDAL.read(firstBand)) : finalDataset[:, :, 1] = Array{UInt16}(ArchGDAL.read(firstBand))
             for bandCounter in 2:number_rasters
                 bandInfo = ArchGDAL.getband(dataset, bandCounter)
                 GPU == true ? band = CuArray{Float16}(ArchGDAL.read(bandInfo)) : band = Array{UInt16}(ArchGDAL.read(bandInfo))
